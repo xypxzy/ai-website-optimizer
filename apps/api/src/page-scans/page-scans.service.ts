@@ -3,12 +3,16 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { CrawlerService } from 'src/crawler/crawler.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePageScanDto } from './dto/page-scan.dto';
 
 @Injectable()
 export class PageScansService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private crawlerService: CrawlerService,
+  ) {}
 
   async createPageScan(
     projectId: string,
@@ -28,7 +32,7 @@ export class PageScansService {
       throw new ForbiddenException('You do not have access to this project');
     }
 
-    // Создание сканирования
+    // Создание записи о сканировании
     const pageScan = await this.prisma.pageScan.create({
       data: {
         url: dto.url,
@@ -37,8 +41,13 @@ export class PageScansService {
       },
     });
 
-    // В реальной имплементации здесь будет запуск процесса сканирования
-    // Например, через очередь задач или вызов сервиса сканирования
+    // Запускаем процесс сканирования асинхронно
+    // В производственной версии лучше использовать систему очередей (например, Bull)
+    setTimeout(() => {
+      this.crawlerService
+        .scanPage(pageScan.id)
+        .catch((error) => console.error(`Scan failed: ${error.message}`));
+    }, 0);
 
     return pageScan;
   }
