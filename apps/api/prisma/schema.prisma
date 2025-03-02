@@ -1,0 +1,313 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User model for authentication and ownership of projects
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  passwordHash  String    // Stores hashed password, never plain text
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  projects      Project[] // One user can have many projects
+
+  @@index([email]) // Index for faster login queries
+}
+
+// Project model represents a website or application being analyzed
+model Project {
+  id            String    @id @default(uuid())
+  name          String    // Name of the project
+  description   String?   // Optional description
+  ownerId       String    // Reference to the user who owns this project
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  owner         User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  pageScans     PageScan[] // One project can have many page scans
+  siteStructureAnalysis SiteStructureAnalysis? // One-to-one relation with site structure analysis
+
+  @@index([ownerId]) // Index for faster user's projects queries
+}
+
+// PageScan model represents a single scan of a web page
+model PageScan {
+  id            String    @id @default(uuid())
+  projectId     String    // Reference to the project this scan belongs to
+  url           String    // URL of the scanned page
+  status        String    // Status of the scan: pending, in_progress, completed, failed
+  screenshotUrl String?   // URL to the screenshot of the page
+  htmlSnapshot  String?   @db.Text // Full HTML snapshot of the page at scan time
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  completedAt   DateTime? // When the scan completed
+  
+  // Relations
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  elements      Element[] // One scan can identify many elements
+  seoAnalysis   SEOAnalysis? // One-to-one relation with SEO analysis
+  technicalAnalysis TechnicalAnalysis? // One-to-one relation with technical analysis
+  linkAnalysis  LinkAnalysis? // One-to-one relation with link analysis
+  mobileAnalysis MobileAnalysis? // One-to-one relation with mobile analysis
+  contentAnalysis ContentAnalysis? // One-to-one relation with content analysis
+  securityAnalysis SecurityAnalysis? // One-to-one relation with security analysis
+  prompts       Prompt[] // One scan can have many prompts
+
+  @@index([projectId]) // Index for faster project's scans queries
+  @@index([url]) // Index for URL lookups
+  @@index([status]) // Index for filtering by status
+}
+
+// Element model represents a DOM element identified during page scan
+model Element {
+  id            String    @id @default(uuid())
+  pageScanId    String    // Reference to the page scan this element belongs to
+  type          String    // Type of element: heading, cta, form, content, navigation, etc.
+  html          String    @db.Text // HTML content of the element
+  selector      String    // CSS selector to identify the element
+  screenshot    String?   // URL to a screenshot of just this element
+  hierarchyLevel Int      // Level in the DOM hierarchy
+  parentElementId String? // Reference to parent element if applicable
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  pageScan      PageScan  @relation(fields: [pageScanId], references: [id], onDelete: Cascade)
+  parentElement Element?  @relation("ElementHierarchy", fields: [parentElementId], references: [id])
+  childElements Element[] @relation("ElementHierarchy") // Self-relation for hierarchy
+  recommendations Recommendation[] // One element can have many recommendations
+
+  @@index([pageScanId]) // Index for faster page scan's elements queries
+  @@index([type]) // Index for filtering by element type
+  @@index([parentElementId]) // Index for hierarchy traversal
+}
+
+// SiteStructureAnalysis model for overall site structure metrics and analysis
+model SiteStructureAnalysis {
+  id            String    @id @default(uuid())
+  projectId     String    @unique // One-to-one with project
+  totalPages    Int       // Total number of pages found
+  maxDepth      Int       // Maximum depth of pages from home
+  sitemapData   Json      // Structured data about site map
+  hierarchyData Json      // Data about site hierarchy
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId]) // Index for the unique relation with project
+}
+
+// SEOAnalysis model for SEO-related metrics and issues
+model SEOAnalysis {
+  id               String    @id @default(uuid())
+  pageScanId       String    @unique // One-to-one with page scan
+  hasTitle         Boolean   // Whether the page has a title tag
+  hasDescription   Boolean   // Whether the page has a meta description
+  titleLength      Int?      // Length of the title tag if present
+  descriptionLength Int?     // Length of the meta description if present
+  headingsStructure Json     // Structure of heading elements (h1-h6)
+  textToHtmlRatio  Float     // Ratio of text content to HTML code
+  keywordDensity   Json      // Data about keyword density
+  hasDuplicateContent Boolean // Whether duplicate content was detected
+  hasCanonicalUrl  Boolean   // Whether canonical URL is specified
+  hasSitemap       Boolean   // Whether sitemap.xml exists
+  hasRobotsTxt     Boolean   // Whether robots.txt exists
+  schemaOrgData    Json?     // Data about Schema.org markup
+  metaTagsIssues   Json?     // Issues with meta tags
+  headingsIssues   Json?     // Issues with heading structure
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  
+  // Relations
+  pageScan         PageScan  @relation(fields: [pageScanId], references: [id], onDelete: Cascade)
+
+  @@index([pageScanId]) // Index for the unique relation with page scan
+}
+
+// TechnicalAnalysis model for performance and technical metrics
+model TechnicalAnalysis {
+  id                String    @id @default(uuid())
+  pageScanId        String    @unique // One-to-one with page scan
+  pageLoadTime      Float     // Total page load time in seconds
+  firstContentfulPaint Float  // Time to first contentful paint in seconds
+  timeToInteractive Float     // Time to interactive in seconds
+  htmlSize          Int       // Size of HTML document in bytes
+  cssSize           Int       // Size of CSS files in bytes
+  jsSize            Int       // Size of JavaScript files in bytes
+  totalImageSize    Int       // Size of all images in bytes
+  imageCount        Int       // Number of images on the page
+  requestCount      Int       // Total number of HTTP requests
+  requestTypes      Json      // Breakdown of requests by type
+  serverResponseTime Float    // Server response time in seconds
+  serverErrors      Json?     // Data about server errors if any
+  cachingHeaders    Json?     // Information about caching headers
+  usesCDN           Boolean   // Whether the site uses a CDN
+  performanceIssues Json?     // Issues affecting performance
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  // Relations
+  pageScan          PageScan  @relation(fields: [pageScanId], references: [id], onDelete: Cascade)
+
+  @@index([pageScanId]) // Index for the unique relation with page scan
+}
+
+// LinkAnalysis model for internal and external link analysis
+model LinkAnalysis {
+  id                String    @id @default(uuid())
+  pageScanId        String    @unique // One-to-one with page scan
+  internalLinksCount Int      // Number of internal links
+  externalLinksCount Int      // Number of external links
+  brokenLinksCount  Int       // Number of broken links
+  internalLinks     Json      // Data about internal links
+  externalLinks     Json      // Data about external links
+  brokenLinks       Json?     // Data about broken links if any
+  anchorTexts       Json      // Analysis of anchor text used
+  noFollowLinks     Json?     // Data about nofollow links
+  linkStructure     Json?     // Information about link structure
+  linkIssues        Json?     // Issues with links
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  // Relations
+  pageScan          PageScan  @relation(fields: [pageScanId], references: [id], onDelete: Cascade)
+
+  @@index([pageScanId]) // Index for the unique relation with page scan
+}
+
+// MobileAnalysis model for mobile-friendliness metrics
+model MobileAnalysis {
+  id                String    @id @default(uuid())
+  pageScanId        String    @unique // One-to-one with page scan
+  isResponsive      Boolean   // Whether the page is responsive
+  hasViewport       Boolean   // Whether viewport meta tag is present
+  tapTargetIssues   Boolean   // Whether there are tap target size issues
+  hasMobileVersion  Boolean   // Whether a separate mobile version exists
+  mobileLoadTime    Float     // Page load time on mobile in seconds
+  mobileScore       Float     // Overall mobile-friendliness score
+  viewportIssues    Json?     // Issues with viewport configuration
+  tapTargetData     Json?     // Data about tap target sizes
+  mobileIssues      Json?     // General mobile usability issues
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  // Relations
+  pageScan          PageScan  @relation(fields: [pageScanId], references: [id], onDelete: Cascade)
+
+  @@index([pageScanId]) // Index for the unique relation with page scan
+}
+
+// ContentAnalysis model for content quality metrics
+model ContentAnalysis {
+  id                String    @id @default(uuid())
+  pageScanId        String    @unique // One-to-one with page scan
+  contentLength     Int       // Total length of content in characters
+  contentUniqueness Float     // Score for content uniqueness
+  keywordCount      Int       // Number of keywords found
+  keywordDistribution Json    // Distribution of keywords throughout content
+  readabilityScore  Float     // Score for content readability
+  formattingQuality Float     // Score for quality of text formatting
+  textToMediaRatio  Float     // Ratio of text to media content
+  contentIssues     Json?     // Issues with content
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  // Relations
+  pageScan          PageScan  @relation(fields: [pageScanId], references: [id], onDelete: Cascade)
+
+  @@index([pageScanId]) // Index for the unique relation with page scan
+}
+
+// SecurityAnalysis model for security-related metrics
+model SecurityAnalysis {
+  id                String    @id @default(uuid())
+  pageScanId        String    @unique // One-to-one with page scan
+  usesHttps         Boolean   // Whether the site uses HTTPS
+  hasMixedContent   Boolean   // Whether there is mixed HTTP/HTTPS content
+  sslInfo           Json?     // Information about SSL/TLS certificate
+  securityHeaders   Json?     // Information about security headers
+  owaspIssues       Json?     // OWASP security issues found
+  securityIssues    Json?     // General security issues
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  // Relations
+  pageScan          PageScan  @relation(fields: [pageScanId], references: [id], onDelete: Cascade)
+
+  @@index([pageScanId]) // Index for the unique relation with page scan
+}
+
+// Prompt model for storing prompts generated for LLM
+model Prompt {
+  id                String    @id @default(uuid())
+  pageScanId        String    // Reference to the page scan this prompt is for
+  name              String    // Name/title for the prompt
+  description       String?   // Optional description
+  promptText        String    @db.Text // The actual prompt text for LLM
+  targetUse         String    // Intended use: general, seo, security, performance, etc.
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  // Relations
+  pageScan          PageScan  @relation(fields: [pageScanId], references: [id], onDelete: Cascade)
+  recommendations   Recommendation[] // One prompt can generate many recommendations
+
+  @@index([pageScanId]) // Index for faster page scan's prompts queries
+  @@index([targetUse]) // Index for filtering by usage type
+}
+
+// Recommendation model for storing improvement recommendations
+model Recommendation {
+  id                String    @id @default(uuid())
+  promptId          String    // Reference to the prompt that generated this recommendation
+  elementId         String?   // Optional reference to a specific element
+  category          String    // Category: structure, seo, technical, links, mobile, content, security
+  type              String    // Type: fix, improve, optimize
+  priority          String    // Priority: high, medium, low
+  description       String    // Brief description of the recommendation
+  reasoning         String    @db.Text // Detailed reasoning behind the recommendation
+  implementation    String    @db.Text // Code or instructions for implementation
+  previewUrl        String?   // URL to a preview of the recommendation
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  // Relations
+  prompt            Prompt    @relation(fields: [promptId], references: [id], onDelete: Cascade)
+  element           Element?  @relation(fields: [elementId], references: [id])
+  preview           Preview?  // One-to-one relation with preview
+
+  @@index([promptId]) // Index for faster prompt's recommendations queries
+  @@index([elementId]) // Index for finding recommendations for a specific element
+  @@index([category]) // Index for filtering by category
+  @@index([priority]) // Index for filtering by priority
+}
+
+// Preview model for storing visual previews of recommendations
+model Preview {
+  id                  String    @id @default(uuid())
+  recommendationId    String    @unique // One-to-one with recommendation
+  originalHtml        String    @db.Text // Original HTML before changes
+  modifiedHtml        String    @db.Text // Modified HTML after changes
+  originalScreenshotUrl String? // URL to screenshot of original
+  previewImageUrl     String?   // URL to preview image of changes
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  
+  // Relations
+  recommendation      Recommendation @relation(fields: [recommendationId], references: [id], onDelete: Cascade)
+
+  @@index([recommendationId]) // Index for the unique relation with recommendation
+}
