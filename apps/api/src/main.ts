@@ -2,6 +2,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module';
+import { BullBoardService } from './bull/bull-board.service';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -18,6 +19,16 @@ async function bootstrap() {
     }),
   );
 
+  // Настройка Bull Board
+  try {
+    const bullBoardService = app.get(BullBoardService);
+    // Монтируем маршрутизатор Bull Board
+    const router = bullBoardService.getRouter();
+    app.use('/admin/queues', router);
+  } catch (e) {
+    console.warn('Bull Board service is not available:', e.message);
+  }
+
   // Enable Swagger
   const options = new DocumentBuilder()
     .setTitle('AI Website Optimizer API')
@@ -31,5 +42,11 @@ async function bootstrap() {
   const port = process.env.PORT ?? 3000;
   await app.listen(port);
   console.log(`Application is running on: http://localhost:${port}`);
+  console.log(
+    `Bull Board is available at: http://localhost:${port}/admin/queues`,
+  );
+  console.log(
+    `Swagger documentation is available at: http://localhost:${port}/api`,
+  );
 }
 bootstrap();

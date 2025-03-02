@@ -3,15 +3,15 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { CrawlerService } from 'src/crawler/crawler.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePageScanDto } from './dto/page-scan.dto';
+import { ScanQueueService } from './scan-queue/scan-queue.service';
 
 @Injectable()
 export class PageScansService {
   constructor(
     private prisma: PrismaService,
-    private crawlerService: CrawlerService,
+    private scanQueueService: ScanQueueService,
   ) {}
 
   async createPageScan(
@@ -32,7 +32,7 @@ export class PageScansService {
       throw new ForbiddenException('You do not have access to this project');
     }
 
-    // Создание записи о сканировании
+    // Создание сканирования с начальным статусом "pending"
     const pageScan = await this.prisma.pageScan.create({
       data: {
         url: dto.url,
@@ -41,13 +41,8 @@ export class PageScansService {
       },
     });
 
-    // Запускаем процесс сканирования асинхронно
-    // В производственной версии лучше использовать систему очередей (например, Bull)
-    setTimeout(() => {
-      this.crawlerService
-        .scanPage(pageScan.id)
-        .catch((error) => console.error(`Scan failed: ${error.message}`));
-    }, 0);
+    // Добавляем задачу в очередь сканирования
+    await this.scanQueueService.addScanJob(pageScan.id);
 
     return pageScan;
   }
@@ -109,5 +104,52 @@ export class PageScansService {
     }
 
     return pageScan;
+  }
+
+  async cancelPageScan(id: string, userId: string) {
+    // Проверка доступа к сканированию
+    const pageScan = await this.findPageScanById(id, userId);
+
+    if (['completed', 'failed', 'cancelled'].includes(pageScan.status)) {
+      throw new ForbiddenException(
+        `Cannot cancel scan with status: ${pageScan.status}`,
+      );
+    }
+
+    // Отменяем задачу в очереди
+    const canceled = await this.scanQueueService.cancelScanJob(id);
+
+    if (!canceled) {
+      // Если задача не была найдена в очереди, но статус активный,
+      // обновляем статус напрямую
+      if (['pending', 'queued', 'in_progress'].includes(pageScan.status)) {
+        await this.prisma.pageScan.update({
+          where: { id },
+          data: {
+            status: 'cancelled',
+            completedAt: new Date(),
+          },
+        });
+      }
+    }
+
+    return { success: true, message: 'Scan cancelled successfully' };
+  }
+
+  async getPageScanStatus(id: string, userId: string) {
+    // Проверка доступа к сканированию
+    const pageScan = await this.findPageScanById(id, userId);
+
+    // Получаем информацию о задаче из очереди
+    const queueStatus = await this.scanQueueService.getScanJobStatus(id);
+
+    return {
+      id: pageScan.id,
+      status: pageScan.status,
+      url: pageScan.url,
+      createdAt: pageScan.createdAt,
+      completedAt: pageScan.completedAt,
+      queueInfo: queueStatus,
+    };
   }
 }

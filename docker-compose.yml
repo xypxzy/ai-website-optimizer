@@ -3,7 +3,7 @@ version: '3.8'
 services:
   postgres:
     image: postgres:15
-    container_name: ai-website-optimizer-postgres
+    container_name: postgres
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
@@ -14,45 +14,64 @@ services:
       - postgres-data:/var/lib/postgresql/data
     networks:
       - app-network
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   redis:
     image: redis:alpine
-    container_name: ai-website-optimizer-redis
+    container_name: redis
     ports:
       - '6379:6379'
+    volumes:
+      - redis-data:/data
     networks:
       - app-network
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 5
 
   api:
     build:
       context: .
       dockerfile: ./apps/api/Dockerfile
-    container_name: ai-website-optimizer-api
+    container_name: api
     restart: always
     ports:
       - '3000:3000'
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       NODE_ENV: production
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/ai_website_optimizer
-      REDIS_URL: redis://redis:6379
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      JWT_SECRET: your-jwt-secret-change-me-in-production
+      UPLOAD_DIR: /app/uploads
+    volumes:
+      - upload-data:/app/uploads
     networks:
       - app-network
 
-  web:
-    build:
-      context: .
-      dockerfile: ./apps/web/Dockerfile
-    container_name: ai-website-optimizer-web
-    restart: always
-    ports:
-      - '3001:80'
-    depends_on:
-      - api
-    networks:
-      - app-network
+  # web:
+  #   build:
+  #     context: .
+  #     dockerfile: ./apps/web/Dockerfile
+  #   container_name: ai-website-optimizer-web
+  #   restart: always
+  #   ports:
+  #     - '3001:80'
+  #   depends_on:
+  #     - api
+  #   networks:
+  #     - app-network
 
 networks:
   app-network:
@@ -60,3 +79,5 @@ networks:
 
 volumes:
   postgres-data:
+  redis-data:
+  upload-data:

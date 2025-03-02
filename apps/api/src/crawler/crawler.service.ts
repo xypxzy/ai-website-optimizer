@@ -1,9 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { Job } from 'bull';
 import { Browser, chromium, Page } from 'playwright';
 import { PrismaService } from '../prisma/prisma.service';
 import { ElementExtractorService } from './element-extractor.service';
-// import { ScreenshotService } from './screenshot.service';
+import { ScreenshotService } from './screenshot.service';
 import { StorageService } from './storage.service';
+
+// Интерфейс для функции обновления прогресса
+export interface ProgressUpdater {
+  (progress: number, message?: string): Promise<void>;
+}
 
 @Injectable()
 export class CrawlerService {
@@ -13,7 +19,7 @@ export class CrawlerService {
   constructor(
     private prisma: PrismaService,
     private elementExtractor: ElementExtractorService,
-    // private screenshotService: ScreenshotService,
+    private screenshotService: ScreenshotService,
     private storageService: StorageService,
   ) {}
 
@@ -41,11 +47,44 @@ export class CrawlerService {
   }
 
   /**
+   * Создает функцию обновления прогресса на основе задачи Bull
+   */
+  private createProgressUpdater(job?: Job): ProgressUpdater {
+    return async (progress: number, message?: string) => {
+      // Логируем прогресс
+      this.logger.log(
+        `Прогресс сканирования: ${progress}%${message ? ` - ${message}` : ''}`,
+      );
+
+      // Если есть задача, обновляем прогресс
+      if (job) {
+        await job.progress(progress);
+
+        // Сохраняем сообщение о прогрессе в метаданных задачи
+        if (message) {
+          await job.update({
+            ...job.data,
+            lastProgressMessage: message,
+            lastProgressTime: new Date().toISOString(),
+          });
+        }
+      }
+    };
+  }
+
+  /**
    * Основной метод для сканирования страницы
    * @param scanId ID сканирования из базы данных
+   * @param job Опциональный объект задачи Bull для обновления прогресса
    */
-  async scanPage(scanId: string): Promise<void> {
+  async scanPage(scanId: string, job?: Job): Promise<void> {
+    // Создаем обновлятель прогресса на основе задачи (или пустую функцию, если задачи нет)
+    const updateProgress = this.createProgressUpdater(job);
+
     try {
+      // Стартовый прогресс
+      await updateProgress(5, 'Начало сканирования');
+
       // Получаем информацию о сканировании из БД
       const pageScan = await this.prisma.pageScan.findUnique({
         where: { id: scanId },
@@ -60,6 +99,8 @@ export class CrawlerService {
         where: { id: scanId },
         data: { status: 'in_progress' },
       });
+
+      await updateProgress(10, 'Инициализация браузера');
 
       // Инициализация браузера и создание контекста
       const browser = await this.initBrowser();
@@ -79,6 +120,7 @@ export class CrawlerService {
       page.setDefaultTimeout(30000);
 
       this.logger.log(`Переход на ${pageScan.url}`);
+      await updateProgress(15, `Загрузка страницы: ${pageScan.url}`);
 
       // Загрузка страницы с ожиданием сетевой активности
       await page.goto(pageScan.url, {
@@ -87,27 +129,30 @@ export class CrawlerService {
       });
 
       // Ожидаем загрузки динамического контента
+      await updateProgress(30, 'Ожидание загрузки динамического контента');
       await page.waitForLoadState('domcontentloaded');
       await this.waitForDynamicContent(page);
 
       // Получаем HTML страницы
+      await updateProgress(40, 'Получение HTML-контента страницы');
       const htmlSnapshot = await page.content();
 
-      // TODO: Implement full page screenshot
       // Делаем скриншот всей страницы
-      // const screenshotUrl = await this.screenshotService.takeFullPageScreenshot(
-      //   page,
-      //   scanId,
-      // );
-      const screenshotUrl = '';
+      await updateProgress(50, 'Создание скриншота страницы');
+      const screenshotUrl = await this.screenshotService.takeFullPageScreenshot(
+        page,
+        scanId,
+      );
 
       // Извлекаем элементы страницы
+      await updateProgress(60, 'Извлечение элементов страницы');
       const elements = await this.elementExtractor.extractElements(
         page,
         scanId,
       );
 
       // Сохраняем данные в базу
+      await updateProgress(80, 'Сохранение результатов в базу данных');
       await this.storageService.savePageScanResults(scanId, {
         htmlSnapshot,
         screenshotUrl,
@@ -118,12 +163,18 @@ export class CrawlerService {
       // Закрываем контекст браузера
       await context.close();
 
+      // Завершающее сообщение
+      await updateProgress(100, 'Сканирование завершено успешно');
+
       this.logger.log(`Сканирование завершено для ${pageScan.url}`);
     } catch (error) {
       this.logger.error(
         `Ошибка сканирования страницы: ${error.message}`,
         error.stack,
       );
+
+      // Обновляем прогресс с указанием ошибки
+      await updateProgress(0, `Ошибка: ${error.message}`);
 
       // Обновляем статус на "ошибка"
       await this.prisma.pageScan.update({
