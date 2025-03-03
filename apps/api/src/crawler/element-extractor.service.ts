@@ -1,8 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Page } from 'playwright';
+import * as cheerio from 'cheerio';
+import * as crypto from 'crypto';
+import { Page } from 'puppeteer';
 import { ScreenshotService } from './screenshot.service';
 
-// Интерфейс для структуры данных об элементе
 export interface ElementData {
   type: string;
   html: string;
@@ -21,24 +22,29 @@ export class ElementExtractorService {
 
   /**
    * Извлекает все типы элементов со страницы
-   * @param page Объект страницы Playwright
+   * @param page Объект страницы Puppeteer
+   * @param html HTML контент страницы
    * @param scanId ID сканирования
    */
-  async extractElements(page: Page, scanId: string): Promise<ElementData[]> {
+  async extractElements(
+    page: Page,
+    html: string,
+    scanId: string,
+  ): Promise<ElementData[]> {
     this.logger.log('Извлечение элементов из страницы');
 
-    // Извлекаем различные типы элементов
-    const headings = await this.extractHeadings(page, scanId);
-    const ctaButtons = await this.extractCTAButtons(page, scanId);
-    const forms = await this.extractForms(page, scanId);
-    const contentBlocks = await this.extractContentBlocks(page, scanId);
-    const navigationElements = await this.extractNavigationElements(
-      page,
-      scanId,
-    );
-    const images = await this.extractImages(page, scanId);
-    const socialProofs = await this.extractSocialProofs(page, scanId);
-    const footerElements = await this.extractFooterElements(page, scanId);
+    // Загружаем HTML в Cheerio
+    const $ = cheerio.load(html);
+
+    // Извлекаем различные типы элементов с помощью Cheerio
+    const headings = this.extractHeadings($);
+    const ctaButtons = this.extractCTAButtons($);
+    const forms = this.extractForms($);
+    const contentBlocks = this.extractContentBlocks($);
+    const navigationElements = this.extractNavigationElements($);
+    const images = this.extractImages($);
+    const socialProofs = this.extractSocialProofs($);
+    const footerElements = this.extractFooterElements($);
 
     // Объединяем все элементы
     const allElements = [
@@ -53,12 +59,9 @@ export class ElementExtractorService {
     ];
 
     // Определяем иерархические отношения между элементами
-    const elementsWithHierarchy = await this.determineHierarchy(
-      page,
-      allElements,
-    );
+    const elementsWithHierarchy = this.determineHierarchy($, allElements);
 
-    // Для каждого элемента создаем скриншот
+    // Создаем скриншоты для элементов
     const elementsWithScreenshots = await this.createElementScreenshots(
       page,
       elementsWithHierarchy,
@@ -69,61 +72,38 @@ export class ElementExtractorService {
   }
 
   /**
-   * Извлекает заголовки (h1-h6) со страницы
+   * Извлекает заголовки (h1-h6) со страницы с помощью Cheerio
    */
-  private async extractHeadings(
-    page: Page,
-    scanId: string,
-  ): Promise<ElementData[]> {
+  private extractHeadings($: cheerio.CheerioAPI | cheerio.Root): ElementData[] {
     const headingElements: ElementData[] = [];
 
     // Извлекаем h1-h6 элементы
     for (let i = 1; i <= 6; i++) {
-      const headings = await page.$$(`h${i}`);
-
-      for (let j = 0; j < headings.length; j++) {
-        const heading = headings[j];
-        const isVisible = await heading.isVisible();
-
-        if (!isVisible) continue;
-
-        const html = await heading.evaluate((el) => el.outerHTML);
-        const selector = await this.generateUniqueSelector(page, heading);
-        const text = await heading.evaluate(
-          (el) => el.textContent?.trim() || '',
-        );
-
+      $(`h${i}`).each((index, element) => {
+        // Проверяем, что элемент не пустой
+        const text = $(element).text().trim();
         if (text) {
-          const boundingBox = await heading.boundingBox();
+          const selector = this.generateCheerioSelector($, element);
 
           headingElements.push({
             type: `heading-h${i}`,
-            html,
+            html: $.html(element),
             selector,
             hierarchyLevel: i,
-            boundingBox: boundingBox
-              ? {
-                  x: boundingBox.x,
-                  y: boundingBox.y,
-                  width: boundingBox.width,
-                  height: boundingBox.height,
-                }
-              : undefined,
           });
         }
-      }
+      });
     }
 
     return headingElements;
   }
 
   /**
-   * Извлекает CTA кнопки со страницы
+   * Извлекает CTA кнопки со страницы с помощью Cheerio
    */
-  private async extractCTAButtons(
-    page: Page,
-    scanId: string,
-  ): Promise<ElementData[]> {
+  private extractCTAButtons(
+    $: cheerio.CheerioAPI | cheerio.Root,
+  ): ElementData[] {
     const ctaElements: ElementData[] = [];
 
     // Селекторы для элементов, похожих на CTA-кнопки
@@ -139,42 +119,24 @@ export class ElementExtractorService {
       '.button',
     ];
 
-    for (const selector of buttonSelectors) {
-      const buttons = await page.$$(selector);
-
-      for (const button of buttons) {
-        const isVisible = await button.isVisible();
-        if (!isVisible) continue;
-
-        const html = await button.evaluate((el) => el.outerHTML);
-        const buttonText = await button.evaluate(
-          (el) => el.textContent?.trim() || '',
-        );
-        const uniqueSelector = await this.generateUniqueSelector(page, button);
+    buttonSelectors.forEach((selector) => {
+      $(selector).each((index, element) => {
+        const html = $.html(element);
+        const buttonText = $(element).text().trim();
 
         // Определяем, является ли элемент CTA-кнопкой
-        const isCTA = await this.isCTAButton(button, buttonText, html);
-
-        if (isCTA) {
-          const boundingBox = await button.boundingBox();
+        if (this.isCTAButton($, element, buttonText, html)) {
+          const uniqueSelector = this.generateCheerioSelector($, element);
 
           ctaElements.push({
             type: 'cta-button',
             html,
             selector: uniqueSelector,
             hierarchyLevel: 2, // Уровень по умолчанию, будет обновлен позже
-            boundingBox: boundingBox
-              ? {
-                  x: boundingBox.x,
-                  y: boundingBox.y,
-                  width: boundingBox.width,
-                  height: boundingBox.height,
-                }
-              : undefined,
           });
         }
-      }
-    }
+      });
+    });
 
     return ctaElements;
   }
@@ -182,11 +144,12 @@ export class ElementExtractorService {
   /**
    * Определяет, является ли элемент CTA-кнопкой
    */
-  private async isCTAButton(
-    button,
+  private isCTAButton(
+    $: cheerio.CheerioAPI | cheerio.Root,
+    element: cheerio.Element,
     text: string,
     html: string,
-  ): Promise<boolean> {
+  ): boolean {
     // Проверяем наличие распространенных CTA-фраз
     const ctaPhrases = [
       'sign up',
@@ -239,129 +202,88 @@ export class ElementExtractorService {
     const hasButtonClass =
       html.includes('btn') || html.includes('button') || html.includes('cta');
 
-    // Проверяем CSS-свойства
-    const hasButtonStyles = await button.evaluate((el) => {
-      const styles = window.getComputedStyle(el);
-      // Проверяем характерные для кнопок стили
-      const hasBackground =
-        styles.backgroundColor !== 'rgba(0, 0, 0, 0)' &&
-        styles.backgroundColor !== 'transparent';
-      const hasBorder =
-        styles.border !== 'none' && styles.border !== '0px none rgb(0, 0, 0)';
-      const hasPadding =
-        parseInt(styles.paddingLeft) > 0 && parseInt(styles.paddingRight) > 0;
-      const hasDistinctiveDisplay =
-        styles.display === 'inline-block' || styles.display === 'flex';
+    // Смотрим атрибуты, которые могут указывать на кнопку
+    const elClass = $(element).attr('class') || '';
+    const elRole = $(element).attr('role') || '';
+    const elType = $(element).attr('type') || '';
 
-      return (
-        hasBackground || (hasBorder && hasPadding) || hasDistinctiveDisplay
-      );
-    });
+    const hasButtonAttributes =
+      elRole === 'button' ||
+      elType === 'submit' ||
+      elType === 'button' ||
+      elClass.includes('btn') ||
+      elClass.includes('button');
 
-    return containsPhrase || (hasButtonClass && hasButtonStyles);
+    return containsPhrase || hasButtonClass || hasButtonAttributes;
   }
 
   /**
-   * Извлекает формы со страницы
+   * Извлекает формы со страницы с помощью Cheerio
    */
-  private async extractForms(
-    page: Page,
-    scanId: string,
-  ): Promise<ElementData[]> {
+  private extractForms($: cheerio.CheerioAPI | cheerio.Root): ElementData[] {
     const formElements: ElementData[] = [];
 
-    const forms = await page.$$('form');
-
-    for (const form of forms) {
-      const isVisible = await form.isVisible();
-      if (!isVisible) continue;
-
-      const html = await form.evaluate((el) => el.outerHTML);
-      const uniqueSelector = await this.generateUniqueSelector(page, form);
-      const boundingBox = await form.boundingBox();
+    $('form').each((index, form) => {
+      const html = $.html(form);
+      const uniqueSelector = this.generateCheerioSelector($, form);
 
       formElements.push({
         type: 'form',
         html,
         selector: uniqueSelector,
         hierarchyLevel: 2, // Уровень по умолчанию, будет обновлен позже
-        boundingBox: boundingBox
-          ? {
-              x: boundingBox.x,
-              y: boundingBox.y,
-              width: boundingBox.width,
-              height: boundingBox.height,
-            }
-          : undefined,
       });
 
       // Также извлекаем поля формы
-      const formFields = await this.extractFormFields(
-        page,
-        form,
-        uniqueSelector,
-      );
+      const formFields = this.extractFormFields($, form, uniqueSelector);
       formElements.push(...formFields);
-    }
+    });
 
     return formElements;
   }
 
   /**
-   * Извлекает поля формы
+   * Извлекает поля формы с помощью Cheerio
    */
-  private async extractFormFields(
-    page: Page,
-    formElement,
+  private extractFormFields(
+    $: cheerio.CheerioAPI | cheerio.Root,
+    form: cheerio.Element,
     formSelector: string,
-  ): Promise<ElementData[]> {
+  ): ElementData[] {
     const fieldElements: ElementData[] = [];
 
     // Селекторы для полей формы
     const fieldSelectors = ['input:not([type="hidden"])', 'select', 'textarea'];
 
-    for (const selector of fieldSelectors) {
-      const fields = await formElement.$$(selector);
+    fieldSelectors.forEach((selector) => {
+      $(form)
+        .find(selector)
+        .each((index, field) => {
+          const html = $.html(field);
+          const uniqueSelector = this.generateCheerioSelector($, field);
+          const fieldType =
+            $(field).attr('type') ||
+            (field as cheerio.TagElement).tagName.toLowerCase();
 
-      for (const field of fields) {
-        const isVisible = await field.isVisible();
-        if (!isVisible) continue;
-
-        const html = await field.evaluate((el) => el.outerHTML);
-        const uniqueSelector = await this.generateUniqueSelector(page, field);
-        const fieldType = await field.evaluate(
-          (el) => el.getAttribute('type') || el.tagName.toLowerCase(),
-        );
-        const boundingBox = await field.boundingBox();
-
-        fieldElements.push({
-          type: `form-field-${fieldType}`,
-          html,
-          selector: uniqueSelector,
-          hierarchyLevel: 3, // Поля формы на уровень ниже самой формы
-          parentSelector: formSelector,
-          boundingBox: boundingBox
-            ? {
-                x: boundingBox.x,
-                y: boundingBox.y,
-                width: boundingBox.width,
-                height: boundingBox.height,
-              }
-            : undefined,
+          fieldElements.push({
+            type: `form-field-${fieldType}`,
+            html,
+            selector: uniqueSelector,
+            hierarchyLevel: 3, // Поля формы на уровень ниже самой формы
+            parentSelector: formSelector,
+          });
         });
-      }
-    }
+    });
 
     return fieldElements;
   }
 
   /**
-   * Извлекает контентные блоки со страницы
+   * Извлекает контентные блоки со страницы с помощью Cheerio
    */
-  private async extractContentBlocks(
-    page: Page,
-    scanId: string,
-  ): Promise<ElementData[]> {
+  private extractContentBlocks(
+    $: cheerio.CheerioAPI | cheerio.Root,
+  ): ElementData[] {
     const contentElements: ElementData[] = [];
 
     // Контентные блоки часто находятся в этих контейнерах
@@ -379,57 +301,39 @@ export class ElementExtractorService {
       '.container > div',
     ];
 
-    for (const selector of contentSelectors) {
-      const blocks = await page.$$(selector);
-
-      for (const block of blocks) {
-        const isVisible = await block.isVisible();
-        if (!isVisible) continue;
-
-        const html = await block.evaluate((el) => el.outerHTML);
-        const uniqueSelector = await this.generateUniqueSelector(page, block);
+    contentSelectors.forEach((selector) => {
+      $(selector).each((index, block) => {
+        const html = $.html(block);
+        const uniqueSelector = this.generateCheerioSelector($, block);
 
         // Включаем только если блок содержит существенный контент
-        const text = await block.evaluate((el) => el.textContent?.trim() || '');
-        const hasChildren = await block.evaluate(
-          (el) => el.children.length > 0,
-        );
+        const text = $(block).text().trim();
+        const hasChildren = $(block).children().length > 0;
 
         if (
           (text.length > 50 || hasChildren) &&
           !html.includes('<header') &&
           !html.includes('<footer')
         ) {
-          const boundingBox = await block.boundingBox();
-
           contentElements.push({
             type: 'content-block',
             html,
             selector: uniqueSelector,
             hierarchyLevel: 2, // Уровень по умолчанию, будет обновлен позже
-            boundingBox: boundingBox
-              ? {
-                  x: boundingBox.x,
-                  y: boundingBox.y,
-                  width: boundingBox.width,
-                  height: boundingBox.height,
-                }
-              : undefined,
           });
         }
-      }
-    }
+      });
+    });
 
     return contentElements;
   }
 
   /**
-   * Извлекает навигационные элементы со страницы
+   * Извлекает навигационные элементы со страницы с помощью Cheerio
    */
-  private async extractNavigationElements(
-    page: Page,
-    scanId: string,
-  ): Promise<ElementData[]> {
+  private extractNavigationElements(
+    $: cheerio.CheerioAPI | cheerio.Root,
+  ): ElementData[] {
     const navElements: ElementData[] = [];
 
     // Навигационные элементы обычно используют эти селекторы
@@ -446,138 +350,96 @@ export class ElementExtractorService {
       '.top-menu',
     ];
 
-    for (const selector of navSelectors) {
-      const navs = await page.$$(selector);
-
-      for (const nav of navs) {
-        const isVisible = await nav.isVisible();
-        if (!isVisible) continue;
-
-        const html = await nav.evaluate((el) => el.outerHTML);
-        const uniqueSelector = await this.generateUniqueSelector(page, nav);
-        const boundingBox = await nav.boundingBox();
+    navSelectors.forEach((selector) => {
+      $(selector).each((index, nav) => {
+        const html = $.html(nav);
+        const uniqueSelector = this.generateCheerioSelector($, nav);
 
         navElements.push({
           type: 'navigation',
           html,
           selector: uniqueSelector,
           hierarchyLevel: 1, // Навигация обычно на верхнем уровне
-          boundingBox: boundingBox
-            ? {
-                x: boundingBox.x,
-                y: boundingBox.y,
-                width: boundingBox.width,
-                height: boundingBox.height,
-              }
-            : undefined,
         });
 
         // Также извлекаем навигационные ссылки
-        const navLinks = await this.extractNavigationLinks(
-          page,
-          nav,
-          uniqueSelector,
-        );
+        const navLinks = this.extractNavigationLinks($, nav, uniqueSelector);
         navElements.push(...navLinks);
-      }
-    }
+      });
+    });
 
     return navElements;
   }
 
   /**
-   * Извлекает навигационные ссылки
+   * Извлекает навигационные ссылки с помощью Cheerio
    */
-  private async extractNavigationLinks(
-    page: Page,
-    navElement,
+  private extractNavigationLinks(
+    $: cheerio.CheerioAPI | cheerio.Root,
+    navElement: cheerio.Element,
     navSelector: string,
-  ): Promise<ElementData[]> {
+  ): ElementData[] {
     const linkElements: ElementData[] = [];
 
-    const links = await navElement.$$('a');
+    $(navElement)
+      .find('a')
+      .each((index, link) => {
+        const html = $.html(link);
+        const uniqueSelector = this.generateCheerioSelector($, link);
+        const text = $(link).text().trim();
 
-    for (const link of links) {
-      const isVisible = await link.isVisible();
-      if (!isVisible) continue;
-
-      const html = await link.evaluate((el) => el.outerHTML);
-      const uniqueSelector = await this.generateUniqueSelector(page, link);
-      const text = await link.evaluate((el) => el.textContent?.trim() || '');
-      const href = await link.evaluate((el) => el.getAttribute('href') || '');
-
-      if (text) {
-        const boundingBox = await link.boundingBox();
-
-        linkElements.push({
-          type: 'navigation-link',
-          html,
-          selector: uniqueSelector,
-          hierarchyLevel: 2, // Ссылки на уровень ниже навигации
-          parentSelector: navSelector,
-          boundingBox: boundingBox
-            ? {
-                x: boundingBox.x,
-                y: boundingBox.y,
-                width: boundingBox.width,
-                height: boundingBox.height,
-              }
-            : undefined,
-        });
-      }
-    }
+        if (text) {
+          linkElements.push({
+            type: 'navigation-link',
+            html,
+            selector: uniqueSelector,
+            hierarchyLevel: 2, // Ссылки на уровень ниже навигации
+            parentSelector: navSelector,
+          });
+        }
+      });
 
     return linkElements;
   }
 
   /**
-   * Извлекает изображения со страницы
+   * Извлекает изображения со страницы с помощью Cheerio
    */
-  private async extractImages(
-    page: Page,
-    scanId: string,
-  ): Promise<ElementData[]> {
+  private extractImages($: cheerio.CheerioAPI | cheerio.Root): ElementData[] {
     const imageElements: ElementData[] = [];
 
-    const images = await page.$$('img');
+    $('img').each((index, image) => {
+      const src = $(image).attr('src');
 
-    for (const image of images) {
-      const isVisible = await image.isVisible();
-      const src = await image.evaluate((el) => el.getAttribute('src'));
+      if (src) {
+        const html = $.html(image);
+        const uniqueSelector = this.generateCheerioSelector($, image);
 
-      if (isVisible && src) {
-        const html = await image.evaluate((el) => el.outerHTML);
-        const uniqueSelector = await this.generateUniqueSelector(page, image);
-        const alt = await image.evaluate((el) => el.getAttribute('alt') || '');
-        const boundingBox = await image.boundingBox();
+        // Проверяем размеры изображения по атрибутам
+        const width = parseInt($(image).attr('width') || '0', 10);
+        const height = parseInt($(image).attr('height') || '0', 10);
 
-        if (boundingBox && boundingBox.width > 50 && boundingBox.height > 50) {
+        // Если есть размеры в атрибутах и они достаточные, или если это просто изображение со src
+        if ((width > 50 && height > 50) || (!width && !height)) {
           imageElements.push({
             type: 'image',
             html,
             selector: uniqueSelector,
             hierarchyLevel: 3, // Изображения обычно вложены в контент
-            boundingBox: {
-              x: boundingBox.x,
-              y: boundingBox.y,
-              width: boundingBox.width,
-              height: boundingBox.height,
-            },
           });
         }
       }
-    }
+    });
 
     return imageElements;
   }
 
   /**
-   * Извлекает блоки с социальными доказательствами (отзывы, рейтинги и т.д.)
+   * Извлекает блоки с социальными доказательствами с помощью Cheerio
    */
-  private async extractSocialProofs(
-    page: Page,
-    scanId: string,
-  ): Promise<ElementData[]> {
+  private extractSocialProofs(
+    $: cheerio.CheerioAPI | cheerio.Root,
+  ): ElementData[] {
     const socialProofElements: ElementData[] = [];
 
     // Селекторы для блоков с социальными доказательствами
@@ -594,44 +456,29 @@ export class ElementExtractorService {
       '[class*="rating"]',
     ];
 
-    for (const selector of socialProofSelectors) {
-      const elements = await page.$$(selector);
-
-      for (const element of elements) {
-        const isVisible = await element.isVisible();
-        if (!isVisible) continue;
-
-        const html = await element.evaluate((el) => el.outerHTML);
-        const uniqueSelector = await this.generateUniqueSelector(page, element);
-        const boundingBox = await element.boundingBox();
+    socialProofSelectors.forEach((selector) => {
+      $(selector).each((index, element) => {
+        const html = $.html(element);
+        const uniqueSelector = this.generateCheerioSelector($, element);
 
         socialProofElements.push({
           type: 'social-proof',
           html,
           selector: uniqueSelector,
           hierarchyLevel: 2, // Уровень по умолчанию, будет обновлен позже
-          boundingBox: boundingBox
-            ? {
-                x: boundingBox.x,
-                y: boundingBox.y,
-                width: boundingBox.width,
-                height: boundingBox.height,
-              }
-            : undefined,
         });
-      }
-    }
+      });
+    });
 
     return socialProofElements;
   }
 
   /**
-   * Извлекает элементы подвала (футера) страницы
+   * Извлекает элементы подвала (футера) страницы с помощью Cheerio
    */
-  private async extractFooterElements(
-    page: Page,
-    scanId: string,
-  ): Promise<ElementData[]> {
+  private extractFooterElements(
+    $: cheerio.CheerioAPI | cheerio.Root,
+  ): ElementData[] {
     const footerElements: ElementData[] = [];
 
     // Селекторы для футера
@@ -642,53 +489,35 @@ export class ElementExtractorService {
       '[role="contentinfo"]',
     ];
 
-    for (const selector of footerSelectors) {
-      const elements = await page.$$(selector);
-
-      for (const element of elements) {
-        const isVisible = await element.isVisible();
-        if (!isVisible) continue;
-
-        const html = await element.evaluate((el) => el.outerHTML);
-        const uniqueSelector = await this.generateUniqueSelector(page, element);
-        const boundingBox = await element.boundingBox();
+    footerSelectors.forEach((selector) => {
+      $(selector).each((index, element) => {
+        const html = $.html(element);
+        const uniqueSelector = this.generateCheerioSelector($, element);
 
         footerElements.push({
           type: 'footer',
           html,
           selector: uniqueSelector,
           hierarchyLevel: 1, // Футер обычно на верхнем уровне
-          boundingBox: boundingBox
-            ? {
-                x: boundingBox.x,
-                y: boundingBox.y,
-                width: boundingBox.width,
-                height: boundingBox.height,
-              }
-            : undefined,
         });
 
         // Также извлекаем контактную информацию
-        const contactInfo = await this.extractContactInfo(
-          page,
-          element,
-          uniqueSelector,
-        );
+        const contactInfo = this.extractContactInfo($, element, uniqueSelector);
         footerElements.push(...contactInfo);
-      }
-    }
+      });
+    });
 
     return footerElements;
   }
 
   /**
-   * Извлекает контактную информацию из футера
+   * Извлекает контактную информацию из футера с помощью Cheerio
    */
-  private async extractContactInfo(
-    page: Page,
-    footerElement,
+  private extractContactInfo(
+    $: cheerio.CheerioAPI | cheerio.Root,
+    footerElement: cheerio.Element,
     footerSelector: string,
-  ): Promise<ElementData[]> {
+  ): ElementData[] {
     const contactElements: ElementData[] = [];
 
     // Селекторы для контактной информации
@@ -702,166 +531,151 @@ export class ElementExtractorService {
       'a[href^="mailto:"]',
     ];
 
-    for (const selector of contactSelectors) {
-      const elements = await footerElement.$$(selector);
+    contactSelectors.forEach((selector) => {
+      $(footerElement)
+        .find(selector)
+        .each((index, element) => {
+          const html = $.html(element);
+          const uniqueSelector = this.generateCheerioSelector($, element);
 
-      for (const element of elements) {
-        const isVisible = await element.isVisible();
-        if (!isVisible) continue;
-
-        const html = await element.evaluate((el) => el.outerHTML);
-        const uniqueSelector = await this.generateUniqueSelector(page, element);
-        const boundingBox = await element.boundingBox();
-
-        contactElements.push({
-          type: 'contact-info',
-          html,
-          selector: uniqueSelector,
-          hierarchyLevel: 2, // Контактная информация на уровень ниже футера
-          parentSelector: footerSelector,
-          boundingBox: boundingBox
-            ? {
-                x: boundingBox.x,
-                y: boundingBox.y,
-                width: boundingBox.width,
-                height: boundingBox.height,
-              }
-            : undefined,
+          contactElements.push({
+            type: 'contact-info',
+            html,
+            selector: uniqueSelector,
+            hierarchyLevel: 2, // Контактная информация на уровень ниже футера
+            parentSelector: footerSelector,
+          });
         });
-      }
-    }
+    });
 
     return contactElements;
   }
 
   /**
-   * Генерирует уникальный CSS-селектор для элемента
+   * Генерирует CSS-селектор для элемента с помощью Cheerio
    */
-  private async generateUniqueSelector(
-    page: Page,
-    elementHandle,
-  ): Promise<string> {
-    // Генерируем уникальный селектор для элемента
+  private generateCheerioSelector(
+    $: cheerio.CheerioAPI | cheerio.Root,
+    element: cheerio.Element,
+  ): string {
     try {
-      // Сначала пробуем использовать встроенный в Playwright метод
-      return await page.evaluate((el) => {
-        function getUniqueSelector(element) {
-          if (element.id) {
-            return `#${element.id}`;
-          }
+      // Если есть id, используем его
+      const id = $(element).attr('id');
+      if (id) {
+        return `#${id}`;
+      }
 
-          // Если элемент имеет атрибут name и он уникален
-          if (element.getAttribute('name')) {
-            const name = element.getAttribute('name');
-            const sameNameElements = document.querySelectorAll(
-              `[name="${name}"]`,
-            );
-            if (sameNameElements.length === 1) {
-              return `[name="${name}"]`;
-            }
-          }
+      // Если есть name, проверяем его уникальность
+      const name = $(element).attr('name');
+      if (name) {
+        if ($(element).length === 1) {
+          return `[name="${name}"]`;
+        }
+      }
 
-          // Если у элемента есть классы, используем их
-          if (element.className) {
-            const classList = Array.from(element.classList).filter(Boolean);
-            if (classList.length > 0) {
-              const classSelector = `.${classList.join('.')}`;
-              // Проверяем, что селектор уникален
-              const matchingElements = document.querySelectorAll(classSelector);
-              if (matchingElements.length === 1) {
-                return classSelector;
-              }
-            }
-          }
+      // Пробуем использовать классы
+      const classes = $(element).attr('class');
+      if (classes) {
+        const classSelector = '.' + classes.split(/\s+/).join('.');
+        if ($(classSelector).length === 1) {
+          return classSelector;
+        }
+      }
 
-          // Если мы дошли до здесь, создаем селектор, включающий тег и родителя
-          let selector = element.tagName.toLowerCase();
-          let parent = element.parentElement;
-          let index = Array.from(parent.children)
-            .filter((child) => (child as Element).tagName === element.tagName)
-            .indexOf(element);
+      // Генерируем селектор на основе тега и позиции среди сиблингов
+      const tagName = (element as cheerio.TagElement).tagName.toLowerCase();
+      const parent = element.parent;
+      const siblings = $(parent).children(tagName);
 
-          if (index > 0) {
-            selector += `:nth-of-type(${index + 1})`;
-          }
-
-          // Если мы на верхнем уровне или дошли до body, возвращаем селектор
-          if (!parent || parent === document.body) {
-            return selector;
-          }
-
-          // Иначе рекурсивно вызываем для родителя и соединяем
-          return `${getUniqueSelector(parent)} > ${selector}`;
+      // Если элемент единственный такого типа у родителя
+      if (siblings.length === 1) {
+        // Если родитель - body, просто возвращаем тег
+        if (parent && (parent as cheerio.TagElement).tagName === 'body') {
+          return tagName;
         }
 
-        return getUniqueSelector(el);
-      }, elementHandle);
+        // Иначе рекурсивно строим селектор для родителя
+        const parentSelector = this.generateCheerioSelector($, parent);
+        return `${parentSelector} > ${tagName}`;
+      }
+
+      // Если элемент не единственный, добавляем :nth-child
+      const index = siblings.toArray().indexOf(element) + 1;
+
+      // Если родитель - body, просто возвращаем тег с nth-child
+      if (parent && (parent as cheerio.TagElement).tagName === 'body') {
+        return `${tagName}:nth-child(${index})`;
+      }
+
+      // Иначе рекурсивно строим селектор для родителя
+      const parentSelector = this.generateCheerioSelector($, parent);
+      return `${parentSelector} > ${tagName}:nth-child(${index})`;
     } catch (error) {
       this.logger.warn(
         `Не удалось сгенерировать уникальный селектор: ${error.message}`,
       );
-      // Запасной вариант для не-уникальных селекторов
-      return await elementHandle.evaluate((el) => el.tagName.toLowerCase());
+      // Запасной вариант - хэш содержимого
+      const content = $.html(element);
+      const hash = crypto
+        .createHash('md5')
+        .update(content)
+        .digest('hex')
+        .substring(0, 8);
+      return `[data-gen-selector="${hash}"]`;
     }
   }
 
   /**
    * Определяет иерархические отношения между элементами
    */
-  private async determineHierarchy(
-    page: Page,
+  private determineHierarchy(
+    $: cheerio.CheerioAPI | cheerio.Root,
     elements: ElementData[],
-  ): Promise<ElementData[]> {
-    const elementsWithParents = await page.evaluate((elementsJson) => {
-      const elements = JSON.parse(elementsJson);
+  ): ElementData[] {
+    const elementsWithParents = [...elements];
 
-      function isDescendant(parent, child) {
+    // Строим дерево элементов
+    for (const element of elementsWithParents) {
+      // Если уже есть родитель, пропускаем
+      if (element.parentSelector) continue;
+
+      // Ищем ближайшего предка элемента
+      for (const potentialParent of elements) {
+        // Пропускаем сам элемент и элементы с уже определенными родителями
+        if (element.selector === potentialParent.selector) continue;
+
+        // Проверяем, содержит ли потенциальный родитель наш элемент
         try {
-          const parentElement = document.querySelector(parent);
-          const childElement = document.querySelector(child);
+          const isDescendant =
+            $(element.selector).parents(potentialParent.selector).length > 0;
 
-          if (!parentElement || !childElement) return false;
-
-          return parentElement.contains(childElement);
-        } catch {
-          return false;
-        }
-      }
-
-      // Строим дерево элементов
-      return elements.map((element) => {
-        // Ищем ближайшего предка элемента
-        for (const potentialParent of elements) {
-          if (
-            element.selector !== potentialParent.selector &&
-            isDescendant(potentialParent.selector, element.selector)
-          ) {
+          if (isDescendant) {
             // Нашли предка - сохраняем ссылку на него
             element.parentSelector = potentialParent.selector;
             break;
           }
+        } catch (error) {
+          // Игнорируем ошибки селекторов
+          continue;
         }
+      }
+    }
 
-        return element;
-      });
-    }, JSON.stringify(elements));
-
-    // Определяем уровни иерархии
-    // Элементы без родителей имеют уровень 1, их дети - 2, и так далее
+    // Создаем карту элементов по селекторам для быстрого доступа
     const elementsBySelector = new Map<string, ElementData>();
     elementsWithParents.forEach((el) =>
       elementsBySelector.set(el.selector, el),
     );
 
     // Устанавливаем уровни иерархии
-    function setHierarchyLevel(element: ElementData, level: number) {
+    const setHierarchyLevel = (element: ElementData, level: number) => {
       element.hierarchyLevel = level;
 
       // Находим всех детей этого элемента
       elementsWithParents
         .filter((el) => el.parentSelector === element.selector)
         .forEach((child) => setHierarchyLevel(child, level + 1));
-    }
+    };
 
     // Начинаем с элементов верхнего уровня (без родителей)
     elementsWithParents
@@ -883,16 +697,25 @@ export class ElementExtractorService {
 
     for (const element of elements) {
       try {
-        // Проверяем, что селектор корректный и элемент существует
-        const elementHandle = await page.$(element.selector);
+        // Получаем ограничивающий прямоугольник элемента
+        const boundingBox = await page.evaluate((selector) => {
+          const el = document.querySelector(selector);
+          if (!el) return null;
 
-        if (elementHandle) {
+          const { x, y, width, height } = el.getBoundingClientRect();
+          return { x, y, width, height };
+        }, element.selector);
+
+        if (boundingBox) {
+          element.boundingBox = boundingBox;
+
           // Делаем скриншот элемента
           const screenshotUrl =
             await this.screenshotService.takeElementScreenshot(
               page,
               element.selector,
               scanId,
+              boundingBox,
             );
 
           // Добавляем URL скриншота к данным элемента
@@ -901,7 +724,7 @@ export class ElementExtractorService {
             screenshot: screenshotUrl,
           });
         } else {
-          // Если не удалось найти элемент, добавляем без скриншота
+          // Если не удалось получить boundingBox, добавляем без скриншота
           elementsWithScreenshots.push(element);
         }
       } catch (error) {

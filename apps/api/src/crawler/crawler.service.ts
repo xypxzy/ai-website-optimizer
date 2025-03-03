@@ -1,12 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Job } from 'bull';
-import { Browser, chromium, Page } from 'playwright';
+import * as puppeteer from 'puppeteer';
+import { Browser, Page } from 'puppeteer';
 import { PrismaService } from '../prisma/prisma.service';
 import { ElementExtractorService } from './element-extractor.service';
 import { ScreenshotService } from './screenshot.service';
 import { StorageService } from './storage.service';
 
-// Интерфейс для функции обновления прогресса
 export interface ProgressUpdater {
   (progress: number, message?: string): Promise<void>;
 }
@@ -29,8 +29,13 @@ export class CrawlerService {
   async initBrowser(): Promise<Browser> {
     if (!this.browser) {
       this.logger.log('Инициализация браузера');
-      this.browser = await chromium.launch({
+      this.browser = await puppeteer.launch({
         headless: true,
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+        ],
       });
     }
     return this.browser;
@@ -102,14 +107,15 @@ export class CrawlerService {
 
       await updateProgress(10, 'Инициализация браузера');
 
-      // Инициализация браузера и создание контекста
+      // Инициализация браузера и создание страницы
       const browser = await this.initBrowser();
-      const context = await browser.newContext({
-        viewport: { width: 1920, height: 1080 },
-        userAgent:
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-      });
-      const page = await context.newPage();
+      const page = await browser.newPage();
+
+      // Настройка страницы
+      await page.setViewport({ width: 1920, height: 1080 });
+      await page.setUserAgent(
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+      );
 
       // Добавляем обработчики для навигационных ошибок
       page.on('pageerror', (error) => {
@@ -117,20 +123,19 @@ export class CrawlerService {
       });
 
       // Настраиваем таймаут
-      page.setDefaultTimeout(30000);
+      page.setDefaultNavigationTimeout(30000);
 
       this.logger.log(`Переход на ${pageScan.url}`);
       await updateProgress(15, `Загрузка страницы: ${pageScan.url}`);
 
       // Загрузка страницы с ожиданием сетевой активности
       await page.goto(pageScan.url, {
-        waitUntil: 'networkidle',
+        waitUntil: 'networkidle2',
         timeout: 60000,
       });
 
       // Ожидаем загрузки динамического контента
       await updateProgress(30, 'Ожидание загрузки динамического контента');
-      await page.waitForLoadState('domcontentloaded');
       await this.waitForDynamicContent(page);
 
       // Получаем HTML страницы
@@ -148,6 +153,7 @@ export class CrawlerService {
       await updateProgress(60, 'Извлечение элементов страницы');
       const elements = await this.elementExtractor.extractElements(
         page,
+        htmlSnapshot,
         scanId,
       );
 
@@ -160,8 +166,8 @@ export class CrawlerService {
         elements,
       });
 
-      // Закрываем контекст браузера
-      await context.close();
+      // Закрываем страницу
+      await page.close();
 
       // Завершающее сообщение
       await updateProgress(100, 'Сканирование завершено успешно');
@@ -195,29 +201,30 @@ export class CrawlerService {
   private async waitForDynamicContent(page: Page): Promise<void> {
     // Ожидаем стабилизации DOM-дерева
     await page
-      .waitForFunction(
-        () => {
-          return new Promise((resolve) => {
-            let lastHTMLSize = 0;
-            let checkCount = 0;
-            const interval = setInterval(() => {
-              const html = document.documentElement.outerHTML;
-              const currentHTMLSize = html.length;
+      .evaluate(() => {
+        return new Promise<boolean>((resolve) => {
+          let lastHTMLSize = 0;
+          let checkCount = 0;
+          const interval = setInterval(() => {
+            const html = document.documentElement.outerHTML;
+            const currentHTMLSize = html.length;
 
-              if (lastHTMLSize === currentHTMLSize && checkCount > 2) {
-                clearInterval(interval);
-                resolve(true);
-              } else {
-                lastHTMLSize = currentHTMLSize;
-                checkCount++;
-              }
-            }, 1000);
-          });
-        },
-        { timeout: 10000 },
-      )
+            if (lastHTMLSize === currentHTMLSize && checkCount > 2) {
+              clearInterval(interval);
+              resolve(true);
+            } else {
+              lastHTMLSize = currentHTMLSize;
+              checkCount++;
+            }
+          }, 1000);
+        });
+      })
       .catch(() => {
         this.logger.warn('Таймаут ожидания стабилизации DOM');
       });
+
+    // Дополнительное ожидание после загрузки страницы
+    // Заменяем waitForTimeout на универсальный подход
+    await new Promise((resolve) => setTimeout(resolve, 2000));
   }
 }

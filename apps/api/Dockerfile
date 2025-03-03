@@ -2,7 +2,10 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Копируем только package.json файлы сначала
+# Установка зависимостей для сборки
+RUN apk add --no-cache python3 make g++
+
+# Копируем package.json файлы сначала
 COPY package.json package-lock.json ./
 COPY apps/api/package.json ./apps/api/
 
@@ -17,23 +20,40 @@ RUN npm run build:api
 
 FROM node:20-alpine AS runner
 
-WORKDIR /app
+# Установка Chromium и зависимостей для Puppeteer
+RUN apk add --no-cache \
+    chromium \
+    nss \
+    freetype \
+    freetype-dev \
+    harfbuzz \
+    ca-certificates \
+    ttf-freefont \
+    font-noto-emoji \
+    python3 \
+    make \
+    g++
 
-# Устанавливаем инструменты для сборки нативных модулей
-RUN apk add --no-cache python3 make g++
+# Настраиваем переменные среды для Puppeteer
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+
+WORKDIR /app
 
 # Копируем package.json файлы
 COPY package.json package-lock.json ./
 COPY apps/api/package.json ./apps/api/
 
 # Устанавливаем зависимости
-# Дополнительно устанавливаем @nestjs/platform-express для решения проблемы с HTTP-драйвером
 RUN npm ci --only=production && \
     npm install @nestjs/platform-express
 
 # Копируем скомпилированный код и Prisma схему
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 COPY --from=builder /app/apps/api/prisma ./apps/api/prisma
+
+# Создаем директорию для скриншотов
+RUN mkdir -p uploads/screenshots && chmod -R 777 uploads
 
 # Генерируем Prisma клиент
 WORKDIR /app/apps/api

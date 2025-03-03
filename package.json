@@ -25,7 +25,9 @@
     "test": "npm run test --workspaces --if-present",
     "docker:up": "docker-compose up -d",
     "docker:down": "docker-compose down",
-    "docker:logs": "docker-compose logs -f"
+    "docker:logs": "docker-compose logs -f",
+    "docker:init-db": "bash ./scripts/init-db.sh",
+    "docker:prisma-studio": "docker exec -it api sh -c \"cd /app/apps/api && npx prisma studio --port 5555 --hostname 0.0.0.0\""
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^5.62.0",
