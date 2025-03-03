@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
+import { BullBoardModule } from './bull/bull-board.module';
 import { BullModule } from './bull/bull.module';
 import { ConfigModule } from './config/config.module';
 import { CrawlerModule } from './crawler/crawler.module';
@@ -14,6 +15,7 @@ import { ProjectsModule } from './projects/projects.module';
     ConfigModule,
     PrismaModule,
     BullModule,
+    BullBoardModule,
     AuthModule,
     ProjectsModule,
     PageScansModule,

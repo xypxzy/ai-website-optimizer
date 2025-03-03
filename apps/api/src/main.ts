@@ -21,10 +21,12 @@ async function bootstrap() {
 
   // Настройка Bull Board
   try {
-    const bullBoardService = app.get(BullBoardService);
-    // Монтируем маршрутизатор Bull Board
-    const router = bullBoardService.getRouter();
-    app.use('/admin/queues', router);
+    const bullBoardService = app.get(BullBoardService, { strict: false });
+    if (bullBoardService) {
+      const router = bullBoardService.getRouter();
+      app.use('/admin/queues', router);
+      console.log('Bull Board service initialized successfully');
+    }
   } catch (e) {
     console.warn('Bull Board service is not available:', e.message);
   }
@@ -48,5 +50,7 @@ async function bootstrap() {
   console.log(
     `Swagger documentation is available at: http://localhost:${port}/api`,
   );
+  console.log(`PgAdmin is available at: http://localhost:5050`);
+  console.log(`RedisInsight is available at: http://localhost:8001`);
 }
 bootstrap();

@@ -1,10 +1,15 @@
+import { BullModule } from '@nestjs/bull';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { BullBoardService } from './bull-board.service';
-import { BullModule } from './bull.module';
 
 @Module({
-  imports: [BullModule, ConfigModule],
+  imports: [
+    ConfigModule,
+    BullModule.registerQueue({
+      name: 'scan-queue',
+    }),
+  ],
   providers: [BullBoardService],
   exports: [BullBoardService],
 })

@@ -5,7 +5,6 @@ WORKDIR /app
 # Копируем только package.json файлы сначала
 COPY package.json package-lock.json ./
 COPY apps/api/package.json ./apps/api/
-COPY packages/*/package.json ./packages/*/
 
 # Устанавливаем все зависимости
 RUN npm ci
@@ -27,8 +26,10 @@ RUN apk add --no-cache python3 make g++
 COPY package.json package-lock.json ./
 COPY apps/api/package.json ./apps/api/
 
-# Устанавливаем только production зависимости в контейнере
-RUN npm ci --only=production
+# Устанавливаем зависимости
+# Дополнительно устанавливаем @nestjs/platform-express для решения проблемы с HTTP-драйвером
+RUN npm ci --only=production && \
+    npm install @nestjs/platform-express
 
 # Копируем скомпилированный код и Prisma схему
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
