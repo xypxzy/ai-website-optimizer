@@ -9,6 +9,7 @@ import { CrawlerModule } from './crawler/crawler.module';
 import { PageScansModule } from './page-scans/page-scans.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProjectsModule } from './projects/projects.module';
+import { TechnicalAnalysisModule } from './technical-analysis/technical-analysis.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { ProjectsModule } from './projects/projects.module';
     ProjectsModule,
     PageScansModule,
     CrawlerModule,
+    TechnicalAnalysisModule,
     // В финальной версии здесь будут подключены другие модули:
     // AnalysisModule,
     // PromptsModule,
