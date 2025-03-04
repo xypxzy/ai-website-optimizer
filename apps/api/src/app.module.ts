@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AnalysisModule } from './analysis/analysis.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
@@ -11,7 +12,6 @@ import { PrismaModule } from './prisma/prisma.module';
 import { ProjectsModule } from './projects/projects.module';
 import { PromptGeneratorModule } from './promt-generator/prompt-generator.module';
 import { RecommenderModule } from './recommender/recommender.module';
-import { TechnicalAnalysisModule } from './technical-analysis/technical-analysis.module';
 
 @Module({
   imports: [
@@ -23,7 +23,7 @@ import { TechnicalAnalysisModule } from './technical-analysis/technical-analysis
     ProjectsModule,
     PageScansModule,
     CrawlerModule,
-    TechnicalAnalysisModule,
+    AnalysisModule,
     PromptGeneratorModule,
     RecommenderModule,
   ],

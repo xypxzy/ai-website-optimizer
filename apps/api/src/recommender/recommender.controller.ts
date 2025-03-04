@@ -33,11 +33,11 @@ class GenerateRecommendationsDto {
 @ApiBearerAuth()
 export class RecommenderController {
   constructor(
-    private llmIntegrationService: RecommenderService,
+    private recommenderService: RecommenderService,
     private prismaService: PrismaService,
   ) {}
 
-  @Post('generate-recommendations')
+  @Post()
   @ApiOperation({ summary: 'Generate recommendations for a prompt' })
   @ApiResponse({
     status: 201,
@@ -64,13 +64,13 @@ export class RecommenderController {
     }
 
     // Generate recommendations
-    return this.llmIntegrationService.generateRecommendations(
+    return this.recommenderService.generateRecommendations(
       dto.promptId,
       dto.forceFresh || false,
     );
   }
 
-  @Get('recommendations/:promptId')
+  @Get(':promptId')
   @ApiOperation({ summary: 'Get recommendations for a prompt' })
   @ApiParam({ name: 'promptId', description: 'ID of the prompt' })
   @ApiResponse({
@@ -98,10 +98,10 @@ export class RecommenderController {
     }
 
     // Get recommendations
-    return this.llmIntegrationService.getRecommendationsForPrompt(promptId);
+    return this.recommenderService.getRecommendationsForPrompt(promptId);
   }
 
-  @Post('refresh-recommendations/:promptId')
+  @Post('refresh/:promptId')
   @ApiOperation({ summary: 'Refresh recommendations for a prompt' })
   @ApiParam({ name: 'promptId', description: 'ID of the prompt' })
   @ApiResponse({
@@ -129,7 +129,7 @@ export class RecommenderController {
     }
 
     // Refresh recommendations
-    return this.llmIntegrationService.refreshRecommendations(promptId);
+    return this.recommenderService.refreshRecommendations(promptId);
   }
 
   @Get('usage-statistics')
@@ -143,7 +143,7 @@ export class RecommenderController {
     @User() user: any,
     @Query('period') period?: 'day' | 'week' | 'month',
   ): Promise<any> {
-    return this.llmIntegrationService.getUsageStatistics(
+    return this.recommenderService.getUsageStatistics(
       user.id,
       period || 'month',
     );

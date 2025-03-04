@@ -43,8 +43,8 @@ export interface ITechnicalAnalysisResult {
 }
 
 @Injectable()
-export class TechnicalAnalysisService {
-  private readonly logger = new Logger(TechnicalAnalysisService.name);
+export class AnalysisService {
+  private readonly logger = new Logger(AnalysisService.name);
   private readonly analyzers: IAnalyzer<IAnalysisResult>[] = [];
 
   constructor(

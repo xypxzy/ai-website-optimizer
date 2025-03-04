@@ -1,7 +1,7 @@
 import { Process, Processor } from '@nestjs/bull';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bull';
-import { TechnicalAnalysisService } from 'src/technical-analysis/technical-analysis.service';
+import { AnalysisService } from 'src/analysis/analysis.service';
 import { CrawlerService } from '../../crawler/crawler.service';
 import { PrismaService } from '../../prisma/prisma.service';
 
@@ -11,7 +11,7 @@ export class ScanProcessor {
 
   constructor(
     private crawlerService: CrawlerService,
-    private technicalAnalysisService: TechnicalAnalysisService,
+    private analysisService: AnalysisService,
     private prisma: PrismaService,
   ) {}
 
@@ -35,9 +35,7 @@ export class ScanProcessor {
       await this.crawlerService.scanPage(job.data.scanId);
 
       // Запускаем технический анализ
-      await this.technicalAnalysisService.runTechnicalAnalysisForScan(
-        job.data.scanId,
-      );
+      await this.analysisService.runTechnicalAnalysisForScan(job.data.scanId);
 
       // Завершаем с прогрессом 100%
       await job.progress(100);

@@ -1,18 +1,13 @@
 import { Module } from '@nestjs/common';
+import { AnalysisModule } from 'src/analysis/analysis.module';
 import { CrawlerModule } from 'src/crawler/crawler.module';
-import { TechnicalAnalysisModule } from 'src/technical-analysis/technical-analysis.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { PageScansController } from './page-scans.controller';
 import { PageScansService } from './page-scans.service';
 import { ScanQueueModule } from './scan-queue/scan-queue.module';
 
 @Module({
-  imports: [
-    PrismaModule,
-    CrawlerModule,
-    TechnicalAnalysisModule,
-    ScanQueueModule,
-  ],
+  imports: [PrismaModule, CrawlerModule, AnalysisModule, ScanQueueModule],
   providers: [PageScansService],
   controllers: [PageScansController],
   exports: [PageScansService],

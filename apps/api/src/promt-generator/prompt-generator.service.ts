@@ -1,9 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { IAnalysisIssue } from '../technical-analysis/interfaces/analysis.interface';
-import { IPerformanceAnalysisResult } from '../technical-analysis/interfaces/performance-analysis.interface';
-import { ISeoAnalysisResult } from '../technical-analysis/interfaces/seo-analysis.interface';
-import { ITechnicalAnalysisResult } from '../technical-analysis/technical-analysis.service';
+import { ITechnicalAnalysisResult } from '../analysis/analysis.service';
+import { IAnalysisIssue } from '../analysis/interfaces/analysis.interface';
+import { IPerformanceAnalysisResult } from '../analysis/interfaces/performance-analysis.interface';
+import { ISeoAnalysisResult } from '../analysis/interfaces/seo-analysis.interface';
 
 /**
  * Интерфейс результата генерации промптов

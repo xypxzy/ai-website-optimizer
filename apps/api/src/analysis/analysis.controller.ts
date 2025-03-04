@@ -8,10 +8,7 @@ import {
 import { JwtAuthGuard } from 'src/auth/guards/jwt-auth.guard';
 import { User } from 'src/common/decorators/user.decorator';
 import { PrismaService } from 'src/prisma/prisma.service';
-import {
-  ITechnicalAnalysisResult,
-  TechnicalAnalysisService,
-} from './technical-analysis.service';
+import { AnalysisService, ITechnicalAnalysisResult } from './analysis.service';
 
 // DTO для запроса на анализ
 class AnalyzePageDto {
@@ -22,13 +19,13 @@ class AnalyzePageDto {
   };
 }
 
-@ApiTags('technical-analysis')
-@Controller('technical-analysis')
+@ApiTags('analysis')
+@Controller('analysis')
 @UseGuards(JwtAuthGuard)
 @ApiBearerAuth()
-export class TechnicalAnalysisController {
+export class AnalysisController {
   constructor(
-    private readonly technicalAnalysisService: TechnicalAnalysisService,
+    private readonly analysisService: AnalysisService,
     private readonly prismaService: PrismaService,
   ) {}
 
@@ -57,8 +54,7 @@ export class TechnicalAnalysisController {
     }
 
     // Получаем результаты анализа
-    const results =
-      await this.technicalAnalysisService.getAnalysisResults(scanId);
+    const results = await this.analysisService.getAnalysisResults(scanId);
 
     if (!results) {
       throw new Error('Результаты анализа не найдены');
@@ -107,7 +103,7 @@ export class TechnicalAnalysisController {
       const html = await response.text();
 
       // Запускаем анализ
-      const results = await this.technicalAnalysisService.analyzePage(
+      const results = await this.analysisService.analyzePage(
         {
           url: dto.url,
           html,
