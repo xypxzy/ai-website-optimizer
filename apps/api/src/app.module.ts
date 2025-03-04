@@ -10,6 +10,7 @@ import { PageScansModule } from './page-scans/page-scans.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProjectsModule } from './projects/projects.module';
 import { PromptGeneratorModule } from './promt-generator/prompt-generator.module';
+import { RecommenderModule } from './recommender/recommender.module';
 import { TechnicalAnalysisModule } from './technical-analysis/technical-analysis.module';
 
 @Module({
@@ -24,11 +25,7 @@ import { TechnicalAnalysisModule } from './technical-analysis/technical-analysis
     CrawlerModule,
     TechnicalAnalysisModule,
     PromptGeneratorModule,
-    // В финальной версии здесь будут подключены другие модули:
-    // AnalysisModule,
-    // PromptsModule,
-    // RecommendationsModule,
-    // и другие
+    RecommenderModule,
   ],
   controllers: [AppController],
   providers: [AppService],
