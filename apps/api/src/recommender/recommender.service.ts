@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { VisualizationService } from '../visualization/visualization.service';
 import {
   IPromptTemplate,
   IRecommenderResponse,
@@ -39,6 +40,7 @@ export class RecommenderService {
     private openaiService: OpenAIService,
     private recommenderCacheService: RecommenderCacheService,
     private recommendationStorageService: RecommendationStorageService,
+    private visualizationService: VisualizationService,
     private prisma: PrismaService,
   ) {}
 
@@ -142,6 +144,31 @@ export class RecommenderService {
         error.stack,
       );
       throw error;
+    }
+  }
+
+  async createVisualizationsForRecommendations(
+    recommendations: any[],
+  ): Promise<void> {
+    try {
+      // Для каждой рекомендации создаем визуализацию
+      for (const recommendation of recommendations) {
+        try {
+          await this.visualizationService.createVisualization(
+            recommendation.id,
+          );
+        } catch (error) {
+          this.logger.warn(
+            `Failed to create visualization for recommendation ${recommendation.id}: ${error.message}`,
+          );
+          // Продолжаем с другими рекомендациями даже если одна не удалась
+        }
+      }
+    } catch (error) {
+      this.logger.error(
+        `Error creating visualizations: ${error.message}`,
+        error.stack,
+      );
     }
   }
 

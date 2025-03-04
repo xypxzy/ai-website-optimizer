@@ -12,6 +12,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { ProjectsModule } from './projects/projects.module';
 import { PromptGeneratorModule } from './promt-generator/prompt-generator.module';
 import { RecommenderModule } from './recommender/recommender.module';
+import { VisualizationModule } from './visualization/visualization.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { RecommenderModule } from './recommender/recommender.module';
     AnalysisModule,
     PromptGeneratorModule,
     RecommenderModule,
+    VisualizationModule,
   ],
   controllers: [AppController],
   providers: [AppService],
