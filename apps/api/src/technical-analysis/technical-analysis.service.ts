@@ -1,5 +1,3 @@
-// src/modules/technical-analysis/technical-analysis.service.ts
-
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { PerformanceAnalyzer } from './analyzers/performance-analyzer';
@@ -58,7 +56,6 @@ export class TechnicalAnalysisService {
   }
 
   public async runTechnicalAnalysisForScan(scanId: string): Promise<void> {
-    // Получаем информацию о сканировании
     const scan = await this.prisma.pageScan.findUnique({
       where: { id: scanId },
     });
@@ -68,11 +65,15 @@ export class TechnicalAnalysisService {
     }
 
     // Запускаем технический анализ
-    await this.analyzePage({
-      url: scan.url,
-      html: scan.htmlSnapshot,
-      screenshot: scan.screenshotUrl ?? undefined,
-    });
+    await this.analyzePage(
+      {
+        url: scan.url,
+        html: scan.htmlSnapshot,
+        screenshot: scan.screenshotUrl ?? undefined,
+      },
+      undefined, // опции анализа
+      scanId, // передаем ID сканирования
+    );
   }
 
   /**
@@ -83,6 +84,7 @@ export class TechnicalAnalysisService {
   public async analyzePage(
     page: IPageToAnalyze,
     options?: IAnalysisOptions,
+    scanId?: string,
   ): Promise<ITechnicalAnalysisResult> {
     this.logger.log(`Starting technical analysis for ${page.url}`);
 
@@ -140,7 +142,7 @@ export class TechnicalAnalysisService {
       this.calculateIssuesSummary(result);
 
       // Сохраняем результаты анализа в базу данных
-      await this.saveAnalysisResults(page, result);
+      await this.saveAnalysisResults(page, result, scanId);
 
       this.logger.log(
         `Technical analysis completed for ${page.url} with overall score: ${result.overallScore}`,
@@ -271,17 +273,26 @@ export class TechnicalAnalysisService {
    * Сохраняет результаты анализа в базу данных
    * @param page Страница
    * @param result Результат анализа
+   * @param scanId ID сканирования (если известен)
    */
   private async saveAnalysisResults(
     page: IPageToAnalyze,
     result: ITechnicalAnalysisResult,
+    scanId?: string,
   ): Promise<void> {
     try {
-      // Находим запись сканирования по URL
-      const pageScan = await this.prisma.pageScan.findFirst({
-        where: { url: page.url },
-        orderBy: { createdAt: 'desc' },
-      });
+      // Находим запись сканирования по ID (если передан) или по URL
+      let pageScan;
+      if (scanId) {
+        pageScan = await this.prisma.pageScan.findUnique({
+          where: { id: scanId },
+        });
+      } else {
+        pageScan = await this.prisma.pageScan.findFirst({
+          where: { url: page.url },
+          orderBy: { createdAt: 'desc' },
+        });
+      }
 
       if (!pageScan) {
         this.logger.warn(`Page scan not found for URL: ${page.url}`);
@@ -298,8 +309,8 @@ export class TechnicalAnalysisService {
             update: {
               hasTitle: seoResult.metrics.hasTitle,
               hasDescription: seoResult.metrics.hasDescription,
-              titleLength: seoResult.metrics.titleLength,
-              descriptionLength: seoResult.metrics.descriptionLength,
+              titleLength: seoResult.metrics.titleLength || null,
+              descriptionLength: seoResult.metrics.descriptionLength || null,
               headingsStructure: seoResult.metrics.headingsStructure,
               textToHtmlRatio: seoResult.metrics.textToHtmlRatio,
               keywordDensity: seoResult.metrics.keywordDensity,
@@ -307,22 +318,18 @@ export class TechnicalAnalysisService {
               hasCanonicalUrl: seoResult.metrics.hasCanonicalUrl,
               hasSitemap: seoResult.metrics.hasSitemap,
               hasRobotsTxt: seoResult.metrics.hasRobotsTxt,
-              schemaOrgData: seoResult.metrics.schemaOrgData,
-              metaTagsIssues: this.filterIssuesByPrefix(
-                seoResult.issues,
-                'seo-meta',
-              ),
-              headingsIssues: this.filterIssuesByPrefix(
-                seoResult.issues,
-                'seo-heading',
-              ),
+              metaTagsIssues:
+                this.filterIssuesByPrefix(seoResult.issues, 'seo-meta') || null,
+              headingsIssues:
+                this.filterIssuesByPrefix(seoResult.issues, 'seo-heading') ||
+                null,
             },
             create: {
               pageScanId: pageScan.id,
               hasTitle: seoResult.metrics.hasTitle,
               hasDescription: seoResult.metrics.hasDescription,
-              titleLength: seoResult.metrics.titleLength,
-              descriptionLength: seoResult.metrics.descriptionLength,
+              titleLength: seoResult.metrics.titleLength || null,
+              descriptionLength: seoResult.metrics.descriptionLength || null,
               headingsStructure: seoResult.metrics.headingsStructure,
               textToHtmlRatio: seoResult.metrics.textToHtmlRatio,
               keywordDensity: seoResult.metrics.keywordDensity,
@@ -330,15 +337,11 @@ export class TechnicalAnalysisService {
               hasCanonicalUrl: seoResult.metrics.hasCanonicalUrl,
               hasSitemap: seoResult.metrics.hasSitemap,
               hasRobotsTxt: seoResult.metrics.hasRobotsTxt,
-              schemaOrgData: seoResult.metrics.schemaOrgData,
-              metaTagsIssues: this.filterIssuesByPrefix(
-                seoResult.issues,
-                'seo-meta',
-              ),
-              headingsIssues: this.filterIssuesByPrefix(
-                seoResult.issues,
-                'seo-heading',
-              ),
+              metaTagsIssues:
+                this.filterIssuesByPrefix(seoResult.issues, 'seo-meta') || null,
+              headingsIssues:
+                this.filterIssuesByPrefix(seoResult.issues, 'seo-heading') ||
+                null,
             },
           });
         }
@@ -362,13 +365,11 @@ export class TechnicalAnalysisService {
               requestCount: perfResult.metrics.requestCount,
               requestTypes: perfResult.metrics.requestTypes,
               serverResponseTime: perfResult.metrics.serverResponseTime,
-              serverErrors: perfResult.metrics.serverErrors,
-              cachingHeaders: perfResult.metrics.cachingHeaders,
+              serverErrors: perfResult.metrics.serverErrors || null,
+              cachingHeaders: perfResult.metrics.cachingHeaders || null,
               usesCDN: perfResult.metrics.usesCDN,
-              performanceIssues: this.filterIssuesByPrefix(
-                perfResult.issues,
-                'perf',
-              ),
+              performanceIssues:
+                this.filterIssuesByPrefix(perfResult.issues, 'perf') || null,
             },
             create: {
               pageScanId: pageScan.id,
@@ -383,21 +384,30 @@ export class TechnicalAnalysisService {
               requestCount: perfResult.metrics.requestCount,
               requestTypes: perfResult.metrics.requestTypes,
               serverResponseTime: perfResult.metrics.serverResponseTime,
-              serverErrors: perfResult.metrics.serverErrors,
-              cachingHeaders: perfResult.metrics.cachingHeaders,
+              serverErrors: perfResult.metrics.serverErrors || null,
+              cachingHeaders: perfResult.metrics.cachingHeaders || null,
               usesCDN: perfResult.metrics.usesCDN,
-              performanceIssues: this.filterIssuesByPrefix(
-                perfResult.issues,
-                'perf',
-              ),
+              performanceIssues:
+                this.filterIssuesByPrefix(perfResult.issues, 'perf') || null,
             },
           });
         }
 
-        // В реальном проекте здесь будут сохраняться результаты других анализаторов
+        // Обновляем статус сканирования, если он не завершен
+        if (pageScan.status !== 'completed') {
+          await tx.pageScan.update({
+            where: { id: pageScan.id },
+            data: {
+              status: 'completed',
+              completedAt: new Date(),
+            },
+          });
+        }
       });
 
-      this.logger.log(`Analysis results saved for ${page.url}`);
+      this.logger.log(
+        `Analysis results saved for ${page.url}, scan ID: ${pageScan.id}`,
+      );
     } catch (error) {
       this.logger.error(
         `Error saving analysis results: ${error.message}`,

@@ -34,15 +34,14 @@ export class ScreenshotService {
    * @returns Относительный путь к файлу скриншота
    */
   async takeFullPageScreenshot(page: Page, scanId: string): Promise<string> {
-    const fileName = `page_${scanId}_${Date.now()}.png`;
+    const fileName = `page_${scanId}_${Date.now()}.jpeg`;
     const filePath = path.join(this.screenshotDir, fileName);
 
     try {
       await page.screenshot({
         path: filePath,
         fullPage: true,
-        type: 'png',
-        quality: 80,
+        type: 'jpeg',
       });
 
       // Проверяем, что файл создан успешно
@@ -78,7 +77,7 @@ export class ScreenshotService {
         .digest('hex')
         .substring(0, 10);
 
-      const fileName = `element_${scanId}_${selectorHash}_${Date.now()}.png`;
+      const fileName = `element_${scanId}_${selectorHash}_${Date.now()}.jpeg`;
       const filePath = path.join(this.screenshotDir, fileName);
 
       // Если у нас уже есть ограничивающий прямоугольник, используем его
@@ -93,8 +92,7 @@ export class ScreenshotService {
             width: boundingBox.width + padding * 2,
             height: boundingBox.height + padding * 2,
           },
-          type: 'png',
-          quality: 80,
+          type: 'jpeg',
         });
       } else {
         // Если нет boundingBox, пробуем найти элемент и сделать скриншот
@@ -139,8 +137,7 @@ export class ScreenshotService {
             width: box.width + padding * 2,
             height: box.height + padding * 2,
           },
-          type: 'png',
-          quality: 80,
+          type: 'jpeg',
         });
       }
 
