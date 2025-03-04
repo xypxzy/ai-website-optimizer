@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { PromptGeneratorService } from '../promt-generator/prompt-generator.service';
 import { ContentAnalyzer } from './analyzers/content-analyzer';
 import { LinkAnalyzer } from './analyzers/link-analyzer';
 import { MobileAnalyzer } from './analyzers/mobile-analyzer';
@@ -20,7 +21,6 @@ import { IMobileAnalysisResult } from './interfaces/mobile-analysis.interface';
 import { IPerformanceAnalysisResult } from './interfaces/performance-analysis.interface';
 import { ISecurityAnalysisResult } from './interfaces/security-analysis.interface';
 import { ISeoAnalysisResult } from './interfaces/seo-analysis.interface';
-import { PromptGeneratorService } from './prompt-generator.service';
 
 /**
  * Результат комплексного технического анализа

@@ -9,6 +9,7 @@ import { CrawlerModule } from './crawler/crawler.module';
 import { PageScansModule } from './page-scans/page-scans.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { ProjectsModule } from './projects/projects.module';
+import { PromptGeneratorModule } from './promt-generator/prompt-generator.module';
 import { TechnicalAnalysisModule } from './technical-analysis/technical-analysis.module';
 
 @Module({
@@ -22,6 +23,7 @@ import { TechnicalAnalysisModule } from './technical-analysis/technical-analysis
     PageScansModule,
     CrawlerModule,
     TechnicalAnalysisModule,
+    PromptGeneratorModule,
     // В финальной версии здесь будут подключены другие модули:
     // AnalysisModule,
     // PromptsModule,
