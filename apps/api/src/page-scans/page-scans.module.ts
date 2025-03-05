@@ -7,7 +7,7 @@ import { PageScansService } from './page-scans.service';
 import { ScanQueueModule } from './scan-queue/scan-queue.module';
 
 @Module({
-  imports: [PrismaModule, CrawlerModule, AnalysisModule, ScanQueueModule],
+  imports: [PrismaModule, ScanQueueModule, CrawlerModule, AnalysisModule],
   providers: [PageScansService],
   controllers: [PageScansController],
   exports: [PageScansService],

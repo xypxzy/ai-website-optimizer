@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { PrismaModule } from 'src/prisma/prisma.module';
 import { PromptGeneratorModule } from 'src/promt-generator/prompt-generator.module';
+import { RecommenderModule } from 'src/recommender/recommender.module';
 import { AnalysisController } from './analysis.controller';
 import { AnalysisService } from './analysis.service';
 import { ContentAnalyzer } from './analyzers/content-analyzer';
@@ -12,7 +13,7 @@ import { SeoAnalyzer } from './analyzers/seo-analyzer';
 import { StructureAnalyzer } from './analyzers/structure-analyzer';
 
 @Module({
-  imports: [PrismaModule, PromptGeneratorModule],
+  imports: [PrismaModule, PromptGeneratorModule, RecommenderModule],
   controllers: [AnalysisController],
   providers: [
     AnalysisService,

@@ -1,6 +1,7 @@
 import { CacheModule } from '@nestjs/cache-manager';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { VisualizationModule } from 'src/visualization/visualization.module';
 import { PrismaModule } from '../prisma/prisma.module';
 import { RecommenderController } from './recommender.controller';
 import { RecommenderService } from './recommender.service';
@@ -13,6 +14,7 @@ import { RecommenderCacheService } from './services/recommender-cache.service';
   imports: [
     ConfigModule,
     PrismaModule,
+    VisualizationModule,
     CacheModule.register({
       ttl: 7 * 24 * 60 * 60 * 1000, // 7 days in milliseconds
       max: 100, // Maximum number of items in cache

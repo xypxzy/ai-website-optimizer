@@ -137,9 +137,12 @@ export class PromptGeneratorService {
       if (generalPrompt) generatedPrompts.push(generalPrompt);
 
       // Сохраняем промпты в базу данных
-      await this.savePromptsToDatabase(scanId, generatedPrompts);
+      const savedPrompts = await this.savePromptsToDatabase(
+        scanId,
+        generatedPrompts,
+      );
 
-      return generatedPrompts;
+      return savedPrompts;
     } catch (error) {
       this.logger.error(
         `Error generating prompts: ${error.message}`,
@@ -1156,30 +1159,23 @@ ${topIssues || 'Критических проблем не обнаружено'
   private async savePromptsToDatabase(
     scanId: string,
     prompts: IGeneratedPrompt[],
-  ): Promise<void> {
-    try {
-      await this.prisma.$transaction(
-        prompts.map((prompt) =>
-          this.prisma.prompt.create({
-            data: {
-              name: prompt.name,
-              description: prompt.description,
-              promptText: prompt.promptText,
-              targetUse: prompt.targetUse,
-              pageScanId: scanId,
-            },
-          }),
-        ),
-      );
+  ): Promise<any[]> {
+    // FIXME: Type 'any[]' is not a valid type for the return value
+    this.logger.log(`Saved ${prompts.length} prompts for scan ${scanId}`);
 
-      this.logger.log(`Saved ${prompts.length} prompts for scan ${scanId}`);
-    } catch (error) {
-      this.logger.error(
-        `Error saving prompts to database: ${error.message}`,
-        error.stack,
-      );
-      throw error;
-    }
+    return this.prisma.$transaction(
+      prompts.map((prompt) =>
+        this.prisma.prompt.create({
+          data: {
+            name: prompt.name,
+            description: prompt.description,
+            promptText: prompt.promptText,
+            targetUse: prompt.targetUse,
+            pageScanId: scanId,
+          },
+        }),
+      ),
+    );
   }
 
   /**

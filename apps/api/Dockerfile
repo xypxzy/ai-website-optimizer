@@ -48,9 +48,11 @@ COPY apps/api/package.json ./apps/api/
 RUN npm ci --only=production && \
     npm install @nestjs/platform-express
 
-# Копируем скомпилированный код и Prisma схему
+# Копируем скомпилированный код, Prisma схему и .env файл
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 COPY --from=builder /app/apps/api/prisma ./apps/api/prisma
+# COPY --from=builder /app/.env ./.env
+COPY --from=builder /app/apps/api/.env ./apps/api/.env
 
 # Создаем директорию для скриншотов
 RUN mkdir -p uploads/screenshots && chmod -R 777 uploads

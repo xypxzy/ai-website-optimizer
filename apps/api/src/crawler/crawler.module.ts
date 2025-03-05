@@ -13,6 +13,6 @@ import { StorageService } from './storage.service';
     ScreenshotService,
     StorageService,
   ],
-  exports: [CrawlerService],
+  exports: [CrawlerService, ScreenshotService],
 })
 export class CrawlerModule {}

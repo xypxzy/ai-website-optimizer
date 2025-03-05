@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { RecommenderService } from 'src/recommender/recommender.service';
 import { PromptGeneratorService } from '../promt-generator/prompt-generator.service';
 import { ContentAnalyzer } from './analyzers/content-analyzer';
 import { LinkAnalyzer } from './analyzers/link-analyzer';
@@ -50,6 +51,7 @@ export class AnalysisService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly promptGenerator: PromptGeneratorService,
+    private readonly recommenderService: RecommenderService,
     private readonly seoAnalyzer: SeoAnalyzer,
     private readonly performanceAnalyzer: PerformanceAnalyzer,
     private readonly structureAnalyzer: StructureAnalyzer,
@@ -92,7 +94,24 @@ export class AnalysisService {
     );
 
     // Генерируем промпты на основе результатов анализа
-    await this.promptGenerator.generatePrompts(scanId, analysisResult);
+    const savedPrompts = await this.promptGenerator.generatePrompts(
+      scanId,
+      analysisResult,
+    );
+
+    // FIXME: Подумать, как лучше реализовать
+    void Promise.all(
+      savedPrompts.map((prompt) =>
+        this.recommenderService
+          .generateRecommendations(prompt.id)
+          .catch((error) => {
+            this.logger.error(
+              `Error generating recommendations for prompt ${prompt.id}: ${error.message}`,
+              error.stack,
+            );
+          }),
+      ),
+    );
   }
 
   /**
