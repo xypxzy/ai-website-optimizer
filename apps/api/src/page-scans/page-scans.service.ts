@@ -135,21 +135,4 @@ export class PageScansService {
 
     return { success: true, message: 'Scan cancelled successfully' };
   }
-
-  async getPageScanStatus(id: string, userId: string) {
-    // Проверка доступа к сканированию
-    const pageScan = await this.findPageScanById(id, userId);
-
-    // Получаем информацию о задаче из очереди
-    const queueStatus = await this.scanQueueService.getScanJobStatus(id);
-
-    return {
-      id: pageScan.id,
-      status: pageScan.status,
-      url: pageScan.url,
-      createdAt: pageScan.createdAt,
-      completedAt: pageScan.completedAt,
-      queueInfo: queueStatus,
-    };
-  }
 }

@@ -54,6 +54,8 @@ services:
       REDIS_PORT: 6379
       JWT_SECRET: your-jwt-secret-change-me-in-production
       UPLOAD_DIR: /app/uploads
+      BROWSER_POOL_SIZE: 3
+      BROWSER_TTL: 1800000
     volumes:
       - upload-data:/app/uploads
     networks:
@@ -63,19 +65,45 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    # Увеличиваем лимиты ресурсов
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 2G
 
-  # web:
+  # Добавляем воркеры для обработки задач
+  # worker:
   #   build:
   #     context: .
-  #     dockerfile: ./apps/web/Dockerfile
-  #   container_name: ai-website-optimizer-web
-  #   restart: always
-  #   ports:
-  #     - '3001:80'
+  #     dockerfile: ./apps/api/Dockerfile
+  #   command: node apps/api/dist/main.js --worker
   #   depends_on:
-  #     - api
+  #     - redis
+  #     - postgres
+  #   environment:
+  #     NODE_ENV: production
+  #     DATABASE_URL: postgresql://postgres:postgres@postgres:5432/ai_website_optimizer
+  #     REDIS_HOST: redis
+  #     REDIS_PORT: 6379
+  #     JWT_SECRET: your-jwt-secret-change-me-in-production
+  #     UPLOAD_DIR: /app/uploads
+  #     BROWSER_POOL_SIZE: 2
+  #     BROWSER_TTL: 1800000
+  #     WORKER_ONLY: 'true'
+  #   volumes:
+  #     - upload-data:/app/uploads
   #   networks:
   #     - app-network
+  #   deploy:
+  #     replicas: 2
+  #     resources:
+  #       limits:
+  #         cpus: '1'
+  #         memory: 2G
 
 networks:
   app-network:

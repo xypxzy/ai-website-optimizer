@@ -3,8 +3,8 @@ import * as crypto from 'crypto';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { Browser, Page } from 'puppeteer';
-import { CrawlerService } from '../../crawler/crawler.service';
-import { ScreenshotService } from '../../crawler/screenshot.service';
+import { BrowserPoolService } from 'src/crawler/services/browser-pool.service';
+import { ScreenshotService } from 'src/crawler/services/screenshot.service';
 
 @Injectable()
 export class RenderService {
@@ -13,7 +13,7 @@ export class RenderService {
   private readonly previewDir = 'uploads/previews';
 
   constructor(
-    private crawlerService: CrawlerService,
+    private browserPoolService: BrowserPoolService,
     private screenshotService: ScreenshotService,
   ) {
     // Создаем директории при инициализации
@@ -45,7 +45,7 @@ export class RenderService {
     let browser: Browser | null = null;
     try {
       // Получаем или инициализируем браузер
-      browser = await this.crawlerService.initBrowser();
+      browser = await this.browserPoolService.getBrowser();
 
       // Создаем уникальные идентификаторы файлов на основе хеша содержимого
       const originalHash = crypto
@@ -206,7 +206,7 @@ export class RenderService {
   ): Promise<string> {
     let browser: Browser | null = null;
     try {
-      browser = await this.crawlerService.initBrowser();
+      browser = await this.browserPoolService.getBrowser();
 
       // Генерируем HTML с выделенными различиями
       const diffHtml = this.generateDiffHighlightHtml(

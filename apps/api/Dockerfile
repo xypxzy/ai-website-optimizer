@@ -32,7 +32,9 @@ RUN apk add --no-cache \
     font-noto-emoji \
     python3 \
     make \
-    g++
+    g++ \
+    htop \
+    procps
 
 # Настраиваем переменные среды для Puppeteer
 ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
@@ -46,16 +48,16 @@ COPY apps/api/package.json ./apps/api/
 
 # Устанавливаем зависимости
 RUN npm ci --only=production && \
-    npm install @nestjs/platform-express
+    npm install @nestjs/platform-express html-minifier
 
 # Копируем скомпилированный код, Prisma схему и .env файл
 COPY --from=builder /app/apps/api/dist ./apps/api/dist
 COPY --from=builder /app/apps/api/prisma ./apps/api/prisma
-# COPY --from=builder /app/.env ./.env
 COPY --from=builder /app/apps/api/.env ./apps/api/.env
 
-# Создаем директорию для скриншотов
-RUN mkdir -p uploads/screenshots && chmod -R 777 uploads
+# Создаем директорию для скриншотов и загрузок с правильными правами
+RUN mkdir -p uploads/screenshots && \
+    chmod -R 777 uploads
 
 # Генерируем Prisma клиент
 WORKDIR /app/apps/api
@@ -69,4 +71,7 @@ ENV JWT_SECRET yourjwtsecretkey
 
 EXPOSE 3000
 
-CMD [ "node", "apps/api/dist/main.js" ]
+# Скрипт запуска с учетом режима воркера
+COPY ./scripts/start-service.sh /app/start-service.sh
+RUN chmod +x /app/start-service.sh
+CMD ["/app/start-service.sh"]

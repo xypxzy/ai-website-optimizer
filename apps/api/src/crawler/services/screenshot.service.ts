@@ -1,3 +1,4 @@
+// src/crawler/screenshot.service.ts
 import { Injectable, Logger } from '@nestjs/common';
 import * as crypto from 'crypto';
 import * as fs from 'fs/promises';
@@ -10,7 +11,6 @@ export class ScreenshotService {
   private readonly screenshotDir = 'uploads/screenshots';
 
   constructor() {
-    // Убеждаемся, что директория для скриншотов существует
     this.ensureDirectoryExists();
   }
 
@@ -38,14 +38,20 @@ export class ScreenshotService {
     const filePath = path.join(this.screenshotDir, fileName);
 
     try {
+      // Создаем директорию перед сохранением, если она не существует
+      await this.ensureDirectoryExists();
+
+      // Оптимизируем скриншот: уменьшаем качество для экономии места
       await page.screenshot({
         path: filePath,
         fullPage: true,
         type: 'jpeg',
+        quality: 80, // Снижаем качество для экономии места
       });
 
       // Проверяем, что файл создан успешно
       await fs.access(filePath);
+      this.logger.log(`Скриншот создан успешно: ${filePath}`);
 
       return fileName; // Возвращаем относительный путь для хранения в БД
     } catch (error) {
@@ -80,6 +86,9 @@ export class ScreenshotService {
       const fileName = `element_${scanId}_${selectorHash}_${Date.now()}.jpeg`;
       const filePath = path.join(this.screenshotDir, fileName);
 
+      // Создаем директорию перед сохранением, если она не существует
+      await this.ensureDirectoryExists();
+
       // Если у нас уже есть ограничивающий прямоугольник, используем его
       if (boundingBox) {
         // Делаем скриншот с небольшим отступом вокруг элемента
@@ -93,6 +102,7 @@ export class ScreenshotService {
             height: boundingBox.height + padding * 2,
           },
           type: 'jpeg',
+          quality: 80,
         });
       } else {
         // Если нет boundingBox, пробуем найти элемент и сделать скриншот
@@ -138,11 +148,13 @@ export class ScreenshotService {
             height: box.height + padding * 2,
           },
           type: 'jpeg',
+          quality: 80,
         });
       }
 
       // Проверяем, что файл создан успешно
       await fs.access(filePath);
+      this.logger.log(`Скриншот элемента создан успешно: ${filePath}`);
 
       return fileName; // Возвращаем относительный путь для хранения в БД
     } catch (error) {
